@@ -1,0 +1,1571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Text Extraction Tool - Documentation</title>
+    <!-- Include Mermaid.js for better diagrams -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+    </script>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-dark: #4338ca;
+            --primary-light: #eef2ff;
+            --secondary: #64748b;
+            --bg: #f8fafc;
+            --sidebar-width: 300px;
+            --text: #1e293b;
+            --code-bg: #1e1e1e;
+            --border: #e2e8f0;
+            --accent: #f59e0b;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            color: var(--text);
+            background: var(--bg);
+            line-height: 1.6;
+        }
+        
+        /* Sidebar Navigation */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: var(--sidebar-width);
+            height: 100vh;
+            background: #ffffff;
+            color: var(--text);
+            overflow-y: auto;
+            padding: 30px 0;
+            z-index: 100;
+            transition: transform 0.3s ease;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+            border-right: 1px solid var(--border);
+        }
+        .sidebar h2 {
+            padding: 0 25px 20px;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--primary);
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .sidebar a {
+            display: block;
+            color: #64748b;
+            text-decoration: none;
+            padding: 10px 25px;
+            font-size: 0.9rem;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            border-left: 4px solid transparent;
+        }
+        .sidebar a:hover {
+            color: var(--primary);
+            background: var(--primary-light);
+        }
+        .sidebar a.active {
+            background: var(--primary-light);
+            color: var(--primary);
+            border-left: 4px solid var(--primary);
+            font-weight: 600;
+        }
+        .sidebar .section-header {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #94a3b8;
+            padding: 20px 25px 8px;
+            font-weight: 700;
+        }
+        
+        /* Main Content */
+        .main {
+            margin-left: var(--sidebar-width);
+            padding: 60px 80px;
+            max-width: 1200px;
+        }
+        
+        section {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            margin-bottom: 40px;
+            border: 1px solid var(--border);
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: #0f172a;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.025em;
+        }
+        h2 {
+            font-size: 1.875rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin: 0 0 1.5rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid var(--primary-light);
+        }
+        h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #334155;
+            margin: 2rem 0 1rem;
+        }
+        h4 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #475569;
+            margin: 1.5rem 0 0.75rem;
+        }
+        p { margin-bottom: 1.25rem; color: #475569; }
+        
+        /* Code blocks */
+        code {
+            background: #f1f5f9;
+            color: #ef4444;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.875rem;
+        }
+        pre {
+            background: var(--code-bg);
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+            font-size: 0.875rem;
+            line-height: 1.7;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+        .keyword { color: #0969da; font-weight: 600; }
+        .string { color: #067a6f; }
+        .comment { color: #6e7781; font-style: italic; }
+        .function { color: #8250df; }
+        .class-name { color: #953800; }
+        
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 1.5rem 0;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th {
+            background: #f8fafc;
+            color: #475569;
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border);
+        }
+        td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            color: #64748b;
+        }
+        tr:last-child td { border-bottom: none; }
+        tr:nth-child(even) { background: #fafafa; }
+        tr:hover { background: #f1f5f9; }
+        
+        /* Info boxes */
+        .info-box {
+            padding: 1.25rem 1.5rem;
+            border-radius: 8px;
+            margin: 1.5rem 0;
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+        }
+        .info-box.tip {
+            background: #f0fdf4;
+            border: 1px solid #bcf0da;
+            color: #166534;
+        }
+        .info-box.warning {
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            color: #92400e;
+        }
+        .info-box.note {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1e40af;
+        }
+        .info-box .title {
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+            display: block;
+        }
+        
+        /* Keyboard shortcuts */
+        kbd {
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 5px;
+            padding: 2px 5px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            box-shadow: 0 2px 0 #cbd5e1;
+            color: #334155;
+            margin: 0 2px;
+        }
+        
+        /* Collapsible sections */
+        details {
+            margin: 1rem 0;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: white;
+            transition: all 0.3s ease;
+        }
+        details[open] {
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        summary {
+            padding: 15px 20px;
+            cursor: pointer;
+            font-weight: 600;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            list-style: none;
+        }
+        summary::before {
+            content: '→';
+            margin-right: 12px;
+            transition: transform 0.2s;
+            color: var(--primary);
+        }
+        details[open] summary::before {
+            transform: rotate(90deg);
+        }
+        summary:hover { background: #f8fafc; }
+        details > div {
+            padding: 0 20px 20px;
+            border-top: 1px solid var(--border);
+            margin-top: -1px;
+            padding-top: 15px;
+        }
+        
+        /* Diagram containers */
+        .diagram {
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 30px;
+            margin: 2rem 0;
+            overflow-x: auto;
+        }
+        .mermaid {
+            display: flex;
+            justify-content: center;
+        }
+        
+        /* Steps */
+        .steps {
+            counter-reset: step;
+            list-style: none;
+            padding: 0;
+            margin-top: 2rem;
+        }
+        .steps li {
+            counter-increment: step;
+            padding: 0 0 2rem 60px;
+            position: relative;
+        }
+        .steps li::before {
+            content: counter(step);
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 36px;
+            height: 36px;
+            background: var(--primary);
+            color: white;
+            border-radius: 10px;
+            text-align: center;
+            line-height: 36px;
+            font-weight: 700;
+            font-size: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.3);
+        }
+        .steps li::after {
+            content: '';
+            position: absolute;
+            left: 18px;
+            top: 45px;
+            bottom: 5px;
+            width: 2px;
+            background: var(--primary-light);
+        }
+        .steps li:last-child::after { display: none; }
+        
+        /* Search */
+        .search-box {
+            width: calc(100% - 50px);
+            padding: 12px 15px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.05);
+            color: white;
+            margin: 0 25px 20px;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            outline: none;
+            transition: all 0.2s;
+        }
+        .search-box:focus {
+            background: rgba(255,255,255,0.1);
+            border-color: var(--primary);
+        }
+        
+        /* Scroll to top */
+        .scroll-top {
+            position: fixed;
+            bottom: 40px;
+            right: 40px;
+            width: 48px;
+            height: 48px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 20px;
+            display: none;
+            z-index: 99;
+            box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.4);
+            transition: all 0.2s;
+        }
+        .scroll-top:hover {
+            background: var(--primary-dark);
+            transform: translateY(-5px);
+        }
+        
+        /* Mobile responsive */
+        .menu-toggle {
+            display: none;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 200;
+            background: var(--primary);
+            color: white;
+            border: none;
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        @media (max-width: 1024px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); }
+            .main { margin-left: 0; padding: 40px; }
+            .menu-toggle { display: block; }
+        }
+        @media (max-width: 640px) {
+            .main { padding: 80px 20px 40px; }
+            section { padding: 25px; }
+            h1 { font-size: 2rem; }
+        }
+    </style>
+</head>
+<body>
+
+<button class="menu-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')">☰ Menu</button>
+
+<!-- Sidebar Navigation -->
+<nav class="sidebar">
+    <h2>� Extractor</h2>
+    <input type="text" class="search-box" id="search" placeholder="Search topics..." oninput="filterNav()">
+    
+    <div class="section-header">Getting Started</div>
+    <a href="#introduction">📌 Introduction</a>
+    <a href="#installation">⚙️ Installation</a>
+    <a href="#quickstart">⚡ Quick Start</a>
+    
+    <div class="section-header">User Guide</div>
+    <a href="#ui-overview">🖥️ UI Overview</a>
+    <a href="#importing-pdfs">📂 Importing PDFs</a>
+    <a href="#drawing-boxes">✏️ Drawing Boxes</a>
+    <a href="#extracting-text">🔍 Extracting Text</a>
+    <a href="#managing-columns">📊 Managing Columns</a>
+    <a href="#save-load">💾 Save &amp; Load</a>
+    <a href="#export-excel">📈 Export to Excel</a>
+    <a href="#keyboard-shortcuts">⌨️ Shortcuts</a>
+    
+    <div class="section-header">Developer</div>
+    <a href="#architecture">🏗️ Architecture</a>
+    <a href="#modules">📦 Modules</a>
+    <a href="#data-models">💾 Data Models</a>
+    
+    <div class="section-header">Process</div>
+    <a href="#text-extraction">🔄 Extraction Process</a>
+    <a href="#ocr-fallback">📷 OCR Fallback</a>
+    <a href="#coordinate-system">📍 Coordinates</a>
+    
+    <div class="section-header">Reference</div>
+    <a href="#api-reference">📚 API Reference</a>
+    <a href="#excel-format">📑 Excel Format</a>
+    <a href="#json-format">🗄️ JSON Format</a>
+    <a href="#test-cases">✅ Test Cases</a>
+    <a href="#troubleshooting">🆘 Troubleshooting</a>
+    <a href="#code-review">🔍 Code Review (2026-02-18)</a>
+</nav>
+
+<!-- Main Content -->
+<div class="main">
+
+<!-- ==================== INTRODUCTION ==================== -->
+<section id="introduction">
+    <h1>PDF Text Extraction Tool</h1>
+    <p>A powerful desktop application for extracting text data from PDF files using interactive region selection, 
+    built with Python, PyQt5, and PyMuPDF.</p>
+    
+    <h3>Key Features</h3>
+    <table>
+        <tr><th>Feature</th><th>Description</th></tr>
+        <tr><td>Batch PDF Import</td><td>Import all PDFs from a directory and its subdirectories</td></tr>
+        <tr><td>Interactive Box Drawing</td><td>Draw, move, resize, and delete extraction regions on PDF pages</td></tr>
+        <tr><td>Smart Text Extraction</td><td>Extracts vector text first, falls back to OCR when needed</td></tr>
+        <tr><td>Custom Data Columns</td><td>Define columns for organizing extracted data</td></tr>
+        <tr><td>Batch Processing</td><td>Apply box templates across multiple pages simultaneously</td></tr>
+        <tr><td>Excel Export</td><td>Export extracted data to formatted Excel workbooks</td></tr>
+        <tr><td>Project Save/Load</td><td>Save and restore complete project state as JSON</td></tr>
+    </table>
+</section>
+
+<!-- ==================== INSTALLATION ==================== -->
+<section id="installation">
+    <h2>Installation</h2>
+    
+    <h3>Prerequisites</h3>
+    <ul>
+        <li>Python 3.8 or higher</li>
+        <li>pip package manager</li>
+        <li>(Optional) Tesseract OCR for enhanced text recognition</li>
+    </ul>
+    
+    <h3>Step-by-Step Installation</h3>
+    <ol class="steps">
+        <li>
+            <strong>Clone or download the project</strong>
+            <pre><code>cd "Function/Identification"</code></pre>
+        </li>
+        <li>
+            <strong>Install Python dependencies</strong>
+            <pre><code>pip install -r requirements.txt</code></pre>
+            <p>This installs: PyQt5, PyMuPDF, openpyxl, Pillow, pytesseract, pytest</p>
+        </li>
+        <li>
+            <strong>(Optional) Install Tesseract OCR</strong>
+            <p>Download from <a href="https://github.com/UB-Mannheim/tesseract/wiki" target="_blank">Tesseract GitHub</a>.
+            Add to your system PATH. After installing, restart the application — the bottom status bar will display OCR availability as <code>OCR: on</code> (available) or <code>OCR: off</code> (not available).</p>
+        </li>
+        <li>
+            <strong>Launch the application</strong>
+            <pre><code>python main.py</code></pre>
+        </li>
+    </ol>
+    
+    <div class="info-box note">
+        <div class="title">💡 Note</div>
+        Tesseract OCR is optional. The application will first try to extract vector-based text 
+        from PDFs. OCR is only used as a fallback for image-based PDF pages.
+    </div>
+</section>
+
+<!-- ==================== QUICK START ==================== -->
+<section id="quickstart">
+    <h2>Quick Start</h2>
+    
+    <ol class="steps">
+        <li><strong>Launch the app</strong> — Run <code>python main.py</code></li>
+        <li><strong>Import PDFs</strong> — Click "Import PDFs" and select a folder</li>
+        <li><strong>Add a data column</strong> — Click "+ Add Column" and name it (e.g., "Title")</li>
+        <li><strong>Select a page</strong> — Click a page in the PDF tree on the left</li>
+        <li><strong>Select a column cell</strong> — Click the "Title" cell in the table for that page</li>
+        <li><strong>Draw a box</strong> — Click and drag on the PDF page to define the extraction region</li>
+        <li><strong>Text is extracted automatically</strong> — The result appears in the table cell</li>
+        <li><strong>Apply to other pages</strong> — Select multiple pages, click "Apply Box"</li>
+        <li><strong>Recognize all text</strong> — Click "Recognize Text" to extract from all boxes</li>
+        <li><strong>Export</strong> — Click "Export Excel" to save results</li>
+    </ol>
+</section>
+
+<!-- ==================== UI OVERVIEW ==================== -->
+<section id="ui-overview">
+    <h2>UI Overview</h2>
+    
+    <p>The application uses a 3-column layout designed for maximum efficiency:</p>
+    
+    <div class="diagram">
+        <div class="mermaid">
+        graph LR
+            Toolbar[Toolbar Interface]
+            
+            subgraph Workspace
+                Tree[PDF Tree View]
+                Table[Data Table]
+                Viewer[PDF Viewer]
+            end
+            
+            Footer[Status Bar]
+            
+            Toolbar --- Workspace
+            Workspace --- Footer
+            
+            style Workspace fill:#f8fafc,stroke:#e2e8f0
+            style Toolbar fill:#eef2ff,stroke:#4f46e5,color:#3730a3
+            style Tree fill:#f1f5f9,stroke:#64748b,color:#1e293b
+            style Table fill:#f1f5f9,stroke:#64748b,color:#1e293b
+            style Viewer fill:#f1f5f9,stroke:#64748b,color:#1e293b
+            style Footer fill:#f1f5f9,stroke:#64748b,color:#1e293b
+        </div>
+    </div>
+    
+    <h3>1st Column: PDF Page List</h3>
+    <p>A tree view showing imported PDF files and their pages. The header includes <strong>Expand All</strong> and <strong>Collapse All</strong> buttons to quickly show or hide page-level children. Click a page to view it.
+    Multi-select with <kbd>Ctrl</kbd>+Click or <kbd>Shift</kbd>+Click for batch operations.</p>
+    
+    <h3>2nd Column: Extracted Data Table</h3>
+    <p>Sortable, filterable table with columns for file name, file path, page number, 
+    and user-defined data columns. Click a data cell to select it for box drawing — if a drawn box exists for that cell the PDF viewer will be focused and centred on that box so it is immediately visible. Double-click to edit values manually.</p>
+    
+    <h3>3rd Column: PDF Page Viewer</h3>
+    <p>Renders the selected PDF page with zoom, pan, and interactive box drawing. A <strong>Centre</strong> button in the zoom toolbar resets pan and recentres the page; clicking a data cell in the table will highlight the corresponding box and centre the viewer on it (when present). Boxes are color-coded and labeled with their column names.</p>
+</section>
+
+<!-- ==================== IMPORTING PDFS ==================== -->
+<section id="importing-pdfs">
+    <h2>Importing PDFs</h2>
+    
+    <ol class="steps">
+        <li>Click <strong>"Import PDFs"</strong> in the toolbar</li>
+        <li>Select a folder in the directory dialog</li>
+        <li>The application scans all subfolders for .pdf files</li>
+        <li>Files appear in the tree view; pages are listed as children</li>
+    </ol>
+    
+    <div class="info-box tip">
+        <div class="title">✅ Tip</div>
+        Already-imported files are automatically skipped to avoid duplicates.
+    </div>
+</section>
+
+<!-- ==================== DRAWING BOXES ==================== -->
+<section id="drawing-boxes">
+    <h2>Drawing Boxes</h2>
+    
+    <h3>Creating a Box</h3>
+    <ol class="steps">
+        <li>Select a page in the tree view</li>
+        <li>Click a data column cell in the table (e.g., "Title" for a specific page)</li>
+        <li>On the PDF viewer, click and drag to draw a rectangle</li>
+        <li>Text in that region is automatically extracted into the table cell</li>
+    </ol>
+    
+    <h3>Editing a Box</h3>
+    <ul>
+        <li><strong>Move:</strong> Click and drag inside the box</li>
+        <li><strong>Resize:</strong> Click the box, then drag any resize handle (corners/edges)</li>
+        <li><strong>Delete:</strong> Select the box and press <kbd>Delete</kbd></li>
+    </ul>
+    
+    <h3>Applying Boxes to Multiple Pages</h3>
+    <ol class="steps">
+        <li>Draw boxes on a "template" page</li>
+        <li>Select the target pages in the tree view (<kbd>Ctrl</kbd>+Click)</li>
+        <li>Click <strong>"Apply Box"</strong> in the toolbar</li>
+        <li>Box coordinates are copied to all selected pages</li>
+        <li>Click <strong>"Recognize Text"</strong> to extract text for all pages</li>
+    </ol>
+</section>
+
+<!-- ==================== EXTRACTING TEXT ==================== -->
+<section id="extracting-text">
+    <h2>Extracting Text</h2>
+    
+    <h3>Automatic Extraction</h3>
+    <p>When you draw a box on a PDF page, text is immediately extracted from that region.</p>
+    
+    <h3>Batch Recognition</h3>
+    <ol class="steps">
+        <li>Select pages in the tree (multi-select supported)</li>
+        <li>Click <strong>"Recognize Text"</strong> in the toolbar</li>
+        <li>All drawn boxes on selected pages are processed</li>
+        <li>Progress is shown in the status bar</li>
+    </ol>
+    
+    <h3>Manual Editing</h3>
+    <p>Double-click any cell in the data table to manually edit the extracted value.
+    To restore original extraction, use <strong>"Recognize Text"</strong>.</p>
+    
+    <div class="info-box note">
+        <div class="title">💡 Extraction Method & Post-processing</div>
+        The tool first attempts vector-based text extraction (fast, accurate). 
+        If no text is found (e.g., scanned PDFs), it automatically falls back to OCR.
+        <p><strong>Post-processing (regularization):</strong> all extracted text (vector or OCR)
+        is normalized to improve consistency — converts full-width (全形) characters to half-width (半形),
+        normalizes dash-like characters to a standard hyphen (`-`), and trims surrounding whitespace.</p>
+    </div>
+</section>
+
+<!-- ==================== MANAGING COLUMNS ==================== -->
+<section id="managing-columns">
+    <h2>Managing Columns</h2>
+    
+    <h3>Adding a Column</h3>
+    <p>Click <strong>"+ Add Column"</strong> below the table. Enter a name (e.g., "Title", "Date", "Page Number").</p>
+    
+    <h3>Removing a Column</h3>
+    <p>Click <strong>"- Remove Column"</strong>, select the column, and confirm. This removes the column
+    and all associated data and boxes.</p>
+    
+    <h3>Showing/Hiding Columns</h3>
+    <p>Click <strong>"Show/Hide Columns"</strong> to toggle visibility of any column including 
+    File Name, File Path, and custom columns.</p>
+</section>
+
+<!-- ==================== SAVE & LOAD ==================== -->
+<section id="save-load">
+    <h2>Save &amp; Load</h2>
+    
+    <h3>Saving</h3>
+    <p>Click <strong>"Save"</strong> (or <kbd>Ctrl</kbd>+<kbd>S</kbd>) to save the entire project state 
+    as a JSON file. This includes:</p>
+    <ul>
+        <li>All imported PDF file references</li>
+        <li>All extracted data and box positions</li>
+        <li>Column definitions</li>
+        <li>Last viewed page (for restoring state)</li>
+    </ul>
+    
+    <h3>Loading</h3>
+    <p>Click <strong>"Load"</strong> (or <kbd>Ctrl</kbd>+<kbd>O</kbd>) to restore a previously 
+    saved project. The application will restore the exact state including the last viewed page.</p>
+</section>
+
+<!-- ==================== EXPORT TO EXCEL ==================== -->
+<section id="export-excel">
+    <h2>Export to Excel</h2>
+    
+    <p>Click <strong>"Export Excel"</strong> to create a formatted .xlsx file with two sheets:</p>
+    
+    <h3>Sheet 1: PDF File List</h3>
+    <table>
+        <tr><th>Column</th><th>Description</th></tr>
+        <tr><td>File Name</td><td>Name of the PDF file</td></tr>
+        <tr><td>File Path</td><td>Full path to the PDF file</td></tr>
+        <tr><td>Number of Pages</td><td>Total pages in the PDF</td></tr>
+        <tr><td>File Size (bytes)</td><td>File size on disk</td></tr>
+    </table>
+    
+    <h3>Sheet 2: PDF Page List</h3>
+    <table>
+        <tr><th>Column</th><th>Description</th></tr>
+        <tr><td>File Name</td><td>Parent PDF file name</td></tr>
+        <tr><td>File Path</td><td>Parent PDF file path</td></tr>
+        <tr><td>Page Number</td><td>1-based page number</td></tr>
+        <tr><td><em>[Custom Columns]</em></td><td>User-defined extracted data columns</td></tr>
+    </table>
+</section>
+
+<!-- ==================== KEYBOARD SHORTCUTS ==================== -->
+<section id="keyboard-shortcuts">
+    <h2>Keyboard Shortcuts</h2>
+    
+    <table>
+        <tr><th>Shortcut</th><th>Action</th></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save project</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Load project</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+Mouse Wheel</td><td>Zoom in/out on PDF page</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+Middle Mouse Drag</td><td>Pan the PDF page</td></tr>
+        <tr><td><kbd>Delete</kbd></td><td>Delete selected box</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+Click (tree)</td><td>Multi-select pages</td></tr>
+        <tr><td><kbd>Shift</kbd>+Click (tree)</td><td>Range-select pages</td></tr>
+    </table>
+</section>
+
+<!-- ==================== ARCHITECTURE ==================== -->
+<section id="architecture">
+    <h2>Architecture</h2>
+    
+    <p>The application follows a modular MVC-like architecture:</p>
+    
+    <div class="diagram">
+        <div class="mermaid">
+        graph TD
+            Main([main.py]) --> UI[ui/main_window.py]
+            UI --> Tree[pdf_tree_view.py]
+            UI --> Table[data_table.py]
+            UI --> Viewer[pdf_viewer.py]
+            
+            Tree --> Model[models/data_models.py]
+            Table --> Model
+            Viewer --> Model
+            
+            UI --> Utils[utils/pdf_processing.py]
+            UI --> Excel[utils/excel_export.py]
+            
+            Utils --> Model
+            Excel --> Model
+            
+            style Main fill:#fff7ed,stroke:#f59e0b,color:#c2410c
+            style Model fill:#eef2ff,stroke:#4f46e5,color:#3730a3
+            style UI fill:#f1f5f9,stroke:#64748b,color:#1e293b
+            style Utils fill:#f1f5f9,stroke:#64748b,color:#1e293b
+            style Excel fill:#f1f5f9,stroke:#64748b,color:#1e293b
+        </div>
+    </div>
+    
+    <h3>Data Flow</h3>
+    <ol>
+        <li><strong>User imports PDFs</strong> → <code>pdf_processing.find_pdf_files()</code> discovers files</li>
+        <li><strong>File info extracted</strong> → <code>PDFFileInfo</code> + <code>PageData</code> models created</li>
+        <li><strong>UI populated</strong> → Tree view, table, and viewer reflect model state</li>
+        <li><strong>User draws box</strong> → <code>BoxInfo</code> stored in <code>PageData</code></li>
+        <li><strong>Text extracted</strong> → <code>pdf_processing.extract_text_from_relative_region()</code></li>
+        <li><strong>Results displayed</strong> → Table cell updated with extracted text</li>
+    </ol>
+</section>
+
+<!-- ==================== MODULES ==================== -->
+<section id="modules">
+    <h2>Module Structure</h2>
+    
+    <pre><code>Function/Identification/
+├── main.py                  # Application entry point
+├── requirements.txt         # Python dependencies
+├── models/
+│   ├── __init__.py
+│   └── data_models.py      # Data classes (BoxInfo, PageData, PDFFileInfo, ProjectData)
+├── utils/
+│   ├── __init__.py
+│   ├── pdf_processing.py   # PDF operations (find, render, extract text, OCR)
+│   └── excel_export.py     # Excel workbook generation
+├── ui/
+│   ├── __init__.py
+│   ├── main_window.py      # Main window with toolbar and status bar
+│   ├── pdf_tree_view.py    # PDF file/page tree widget
+│   ├── data_table.py       # Extracted data table widget
+│   └── pdf_viewer.py       # PDF page viewer with box drawing
+├── Test/
+│   ├── conftest.py          # Test fixtures and configuration
+│   ├── test_data_models.py  # Data model tests
+│   ├── test_pdf_processing.py # PDF processing tests
+│   ├── test_excel_export.py # Excel export tests
+│   └── test_ui_components.py # UI component tests
+└── documentation/
+    ├── specification.md     # Requirements specification
+    └── documentation.html   # This documentation file</code></pre>
+</section>
+
+<!-- ==================== DATA MODELS ==================== -->
+<section id="data-models">
+    <h2>Data Models</h2>
+    
+    <h3>Class Hierarchy</h3>
+    <div class="diagram">
+        <div class="mermaid">
+        classDiagram
+            class ProjectData {
+                +List pdf_files
+                +List columns
+                +DateTime last_saved_time
+                +save_to_json(path)
+                +load_from_json(path)
+            }
+            class PDFFileInfo {
+                +String file_name
+                +String file_path
+                +int num_pages
+                +List pages
+            }
+            class PageData {
+                +int page_number
+                +Dict extracted_data
+                +List boxes
+            }
+            class BoxInfo {
+                +String column_name
+                +float x, y, width, height
+                +String extracted_text
+                +get_absolute_rect(w, h)
+            }
+            
+            ProjectData *-- PDFFileInfo : contains 1..*
+            PDFFileInfo *-- PageData : contains 1..*
+            PageData *-- BoxInfo : contains 0..*
+        </div>
+    </div>
+    
+    <details>
+        <summary>BoxInfo Details</summary>
+        <div>
+            <p>Represents a rectangular region on a PDF page for text extraction.
+            Coordinates are stored as <strong>relative values (0.0 to 1.0)</strong> of page dimensions,
+            allowing boxes to be applied across pages of different sizes.</p>
+            <table>
+                <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+                <tr><td>column_name</td><td>str</td><td>Associated data column name</td></tr>
+                <tr><td>x</td><td>float</td><td>Relative x of top-left (0.0-1.0)</td></tr>
+                <tr><td>y</td><td>float</td><td>Relative y of top-left (0.0-1.0)</td></tr>
+                <tr><td>width</td><td>float</td><td>Relative width (0.0-1.0)</td></tr>
+                <tr><td>height</td><td>float</td><td>Relative height (0.0-1.0)</td></tr>
+                <tr><td>extracted_text</td><td>str</td><td>Text extracted from this region</td></tr>
+            </table>
+        </div>
+    </details>
+    
+    <details>
+        <summary>PageData Details</summary>
+        <div>
+            <p>Represents a single PDF page with its extracted data and box annotations.</p>
+            <table>
+                <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+                <tr><td>page_number</td><td>int</td><td>Zero-based page index</td></tr>
+                <tr><td>extracted_data</td><td>Dict[str, str]</td><td>Column name → extracted text</td></tr>
+                <tr><td>boxes</td><td>List[BoxInfo]</td><td>Drawn boxes on this page</td></tr>
+            </table>
+        </div>
+    </details>
+</section>
+
+<!-- ==================== TEXT EXTRACTION METHODOLOGY ==================== -->
+<section id="text-extraction">
+    <h2>Text Extraction Methodology</h2>
+    
+    <h3>Two-Phase Extraction Strategy</h3>
+    <div class="diagram">
+        <div class="mermaid">
+        graph LR
+            Start([Selected Box]) --> Phase1[Phase 1: Vector Extraction]
+            Phase1 --> Check{Text Found?}
+            Check -- Yes --> Success([Success: Return Text])
+            Check -- No --> Phase2[Phase 2: OCR Fallback]
+            Phase2 --> Success
+            
+            style Start fill:#fff7ed,stroke:#f59e0b,color:#c2410c
+            style Success fill:#f0fdf4,stroke:#10b981,color:#166534
+            style Check fill:#eef2ff,stroke:#4f46e5,color:#3730a3
+            style Phase1 fill:#f1f5f9,stroke:#64748b,color:#1e293b
+            style Phase2 fill:#fefce8,stroke:#eab308,color:#854d0e
+        </div>
+    </div>
+    
+    <ol>
+        <li><strong>Vector Text Extraction:</strong> PyMuPDF extracts text objects within the clipping rectangle.
+        This is fast, accurate, and works for digitally-created PDFs.</li>
+        <li><strong>OCR Fallback:</strong> If no vector text is found, the region is rendered at 300 DPI 
+        and processed with pytesseract (or PyMuPDF's built-in OCR) for optical character recognition.</li>
+    </ol>
+</section>
+
+<!-- ==================== OCR FALLBACK ==================== -->
+<section id="ocr-fallback">
+    <h2>OCR Fallback</h2>
+    
+    <p>The OCR fallback is triggered automatically when:</p>
+    <ul>
+        <li>The PDF page contains only images (scanned pages)</li>
+        <li>The drawn box region has no vector text objects</li>
+    </ul>
+    
+    <h3>OCR Pipeline</h3>
+    <ol class="steps">
+        <li>Region is rendered at 3x zoom (~300 DPI) using PyMuPDF</li>
+        <li>Rendered image is passed to pytesseract for text recognition</li>
+        <li>If pytesseract is not installed, PyMuPDF's built-in OCR is attempted</li>
+        <li>Extracted text is returned (or empty string on failure)</li>
+    </ol>
+
+    <h3>Post-processing (regularization)</h3>
+    <p>All extracted text (vector or OCR) is passed through a regularization step that improves
+    downstream consistency and matching. Regularization includes:</p>
+    <ul>
+        <li>Full-width (全形) → half-width (半形) character conversion (NFKC)</li>
+        <li>Dash/minus normalization (em/en dash → `-`)</li>
+        <li>Trim leading/trailing whitespace</li>
+    </ul>
+    <p>This step runs automatically after extraction and before the value is stored or exported.</p>
+    
+    <div class="info-box warning">
+        <div class="title">⚠️ OCR Accuracy</div>
+        OCR accuracy depends on image quality, font, and language. For best results, draw boxes
+        tightly around the text area and ensure the source PDF is high quality.
+    </div>
+</section>
+
+<!-- ==================== COORDINATE SYSTEM ==================== -->
+<section id="coordinate-system">
+    <h2>Coordinate System</h2>
+    
+    <p>The application uses <strong>relative coordinates</strong> (0.0 to 1.0) for box positions, ensuring portability across different page sizes:</p>
+    
+    <div class="diagram" style="padding: 10px;">
+        <div class="mermaid">
+        graph TD
+            Origin(0,0) --- X1(1,0)
+            Origin --- Y1(0,1)
+            X1 --- XY(1,1)
+            Y1 --- XY
+            
+            subgraph Box[Relative Area]
+                direction TB
+                p1(x=0.1, y=0.2) --- p2(w=0.3, h=0.1)
+            end
+            
+            style Origin fill:white,stroke-dasharray: 5 5
+            style X1 fill:white,stroke-dasharray: 5 5
+            style Y1 fill:white,stroke-dasharray: 5 5
+            style XY fill:white,stroke-dasharray: 5 5
+            style Box fill:#eef2ff,stroke:#4f46e5
+        </div>
+    </div>
+    
+    <p>This design allows boxes to be applied across pages of different sizes. 
+    When extracting text, relative coordinates are converted to absolute PDF points:</p>
+    
+    <pre><code><span class="comment"># Conversion formula</span>
+abs_x = rel_x * page_width    <span class="comment"># e.g., 0.1 * 612 = 61.2 points</span>
+abs_y = rel_y * page_height   <span class="comment"># e.g., 0.2 * 792 = 158.4 points</span></code></pre>
+</section>
+
+<!-- ==================== API REFERENCE ==================== -->
+<section id="api-reference">
+    <h2>API Reference</h2>
+    
+    <h3>models.data_models</h3>
+    
+    <details>
+        <summary><code>BoxInfo</code></summary>
+        <div>
+            <h4>Constructor</h4>
+            <pre><code>BoxInfo(column_name: str, x: float=0.0, y: float=0.0, 
+       width: float=0.0, height: float=0.0, extracted_text: str="")</code></pre>
+            
+            <h4>Methods</h4>
+            <table>
+                <tr><th>Method</th><th>Returns</th><th>Description</th></tr>
+                <tr><td><code>to_dict()</code></td><td>dict</td><td>Serialize to dictionary</td></tr>
+                <tr><td><code>from_dict(data)</code></td><td>BoxInfo</td><td>Deserialize from dictionary</td></tr>
+                <tr><td><code>get_absolute_rect(w, h)</code></td><td>tuple</td><td>Convert to absolute (x1,y1,x2,y2)</td></tr>
+                <tr><td><code>from_absolute_rect(...)</code></td><td>BoxInfo</td><td>Create from absolute coordinates</td></tr>
+            </table>
+        </div>
+    </details>
+    
+    <details>
+        <summary><code>PageData</code></summary>
+        <div>
+            <h4>Constructor</h4>
+            <pre><code>PageData(page_number: int=0, extracted_data: Dict={}, boxes: List=[])</code></pre>
+            
+            <h4>Methods</h4>
+            <table>
+                <tr><th>Method</th><th>Description</th></tr>
+                <tr><td><code>get_box_for_column(name)</code></td><td>Find box by column name</td></tr>
+                <tr><td><code>set_box_for_column(box)</code></td><td>Add or replace box for column</td></tr>
+                <tr><td><code>remove_box_for_column(name)</code></td><td>Remove box for column</td></tr>
+                <tr><td><code>clear_all_data()</code></td><td>Clear all data and boxes</td></tr>
+            </table>
+        </div>
+    </details>
+    
+    <details>
+        <summary><code>ProjectData</code></summary>
+        <div>
+            <h4>Methods</h4>
+            <table>
+                <tr><th>Method</th><th>Description</th></tr>
+                <tr><td><code>save_to_json(path)</code></td><td>Save project to JSON file</td></tr>
+                <tr><td><code>load_from_json(path)</code></td><td>Load project from JSON file</td></tr>
+                <tr><td><code>add_column(name)</code></td><td>Add new data column</td></tr>
+                <tr><td><code>remove_column(name)</code></td><td>Remove column and all data</td></tr>
+                <tr><td><code>get_file_by_path(path)</code></td><td>Find PDF file by path</td></tr>
+                <tr><td><code>get_column_names()</code></td><td>List all column names</td></tr>
+                <tr><td><code>remove_pdf_file(path)</code></td><td>Remove a PDF file</td></tr>
+            </table>
+        </div>
+    </details>
+    
+    <h3>utils.pdf_processing</h3>
+    
+    <details>
+        <summary>Functions</summary>
+        <div>
+            <table>
+                <tr><th>Function</th><th>Description</th></tr>
+                <tr><td><code>find_pdf_files(directory)</code></td><td>Walk directory tree to find all .pdf files</td></tr>
+                <tr><td><code>get_pdf_info(file_path)</code></td><td>Get file metadata (name, pages, size)</td></tr>
+                <tr><td><code>render_pdf_page(path, page, zoom)</code></td><td>Render page to PNG bytes</td></tr>
+                <tr><td><code>get_page_dimensions(path, page)</code></td><td>Get page width/height in points</td></tr>
+                <tr><td><code>extract_text_from_region(...)</code></td><td>Extract text from absolute coordinates</td></tr>
+                <tr><td><code>extract_text_from_relative_region(...)</code></td><td>Extract text from relative coordinates</td></tr>
+                <tr><td><code>regularize_text(text)</code></td><td>Normalize extracted text (full-width → half-width, dash normalization, trim)</td></tr>
+                <tr><td><code>is_ocr_available()</code></td><td>Return True if OCR engine (Tesseract or PyMuPDF OCR) is usable</td></tr>
+                <tr><td><code>check_page_has_text(path, page)</code></td><td>Check if page has vector text</td></tr>
+            </table>
+            
+            <h4>Example Usage</h4>
+            <pre><code><span class="keyword">from</span> utils.pdf_processing <span class="keyword">import</span> find_pdf_files, extract_text_from_relative_region
+
+<span class="comment"># Find all PDFs in a folder</span>
+pdfs = find_pdf_files(<span class="string">"C:/Documents"</span>)
+
+<span class="comment"># Extract text from a region</span>
+text = extract_text_from_relative_region(
+    pdfs[0], page_number=0,
+    rel_x=0.1, rel_y=0.1, rel_w=0.5, rel_h=0.05
+)
+print(text)</code></pre>
+        </div>
+    </details>
+    
+    <h3>utils.excel_export</h3>
+    
+    <details>
+        <summary>Functions</summary>
+        <div>
+            <pre><code><span class="keyword">def</span> <span class="function">export_to_excel</span>(project_data: ProjectData, output_path: str) -> None:
+    <span class="string">"""Export project data to formatted Excel workbook."""</span></code></pre>
+            
+            <h4>Example</h4>
+            <pre><code><span class="keyword">from</span> utils.excel_export <span class="keyword">import</span> export_to_excel
+<span class="keyword">from</span> models.data_models <span class="keyword">import</span> ProjectData
+
+project = ProjectData.load_from_json(<span class="string">"my_project.json"</span>)
+export_to_excel(project, <span class="string">"output.xlsx"</span>)</code></pre>
+        </div>
+    </details>
+</section>
+
+<!-- ==================== EXCEL FORMAT ==================== -->
+<section id="excel-format">
+    <h2>Excel Export Format</h2>
+    
+    <h3>Sheet 1: PDF File List</h3>
+    <table>
+        <tr><th>Column</th><th>Type</th><th>Example</th></tr>
+        <tr><td>File Name</td><td>String</td><td>report.pdf</td></tr>
+        <tr><td>File Path</td><td>String</td><td>C:\Documents\report.pdf</td></tr>
+        <tr><td>Number of Pages</td><td>Integer</td><td>15</td></tr>
+        <tr><td>File Size (bytes)</td><td>Integer</td><td>524288</td></tr>
+    </table>
+    
+    <h3>Sheet 2: PDF Page List</h3>
+    <table>
+        <tr><th>Column</th><th>Type</th><th>Example</th></tr>
+        <tr><td>File Name</td><td>String</td><td>report.pdf</td></tr>
+        <tr><td>File Path</td><td>String</td><td>C:\Documents\report.pdf</td></tr>
+        <tr><td>Page Number</td><td>Integer (1-based)</td><td>1</td></tr>
+        <tr><td><em>[Title]</em></td><td>String</td><td>Annual Report 2025</td></tr>
+        <tr><td><em>[Date]</em></td><td>String</td><td>2025-01-15</td></tr>
+    </table>
+    
+    <div class="info-box note">
+        <div class="title">💡 Column Mapping</div>
+        Custom columns in the Excel file correspond directly to user-defined columns 
+        in the application. The column order matches the order in which columns were created.
+    </div>
+</section>
+
+<!-- ==================== JSON FORMAT ==================== -->
+<section id="json-format">
+    <h2>JSON Save Format</h2>
+    
+    <details>
+        <summary>Full JSON Structure Example</summary>
+        <div>
+            <pre><code>{
+  <span class="string">"pdf_files"</span>: [
+    {
+      <span class="string">"file_name"</span>: <span class="string">"report.pdf"</span>,
+      <span class="string">"file_path"</span>: <span class="string">"C:/docs/report.pdf"</span>,
+      <span class="string">"num_pages"</span>: 2,
+      <span class="string">"file_size"</span>: 50000,
+      <span class="string">"pages"</span>: [
+        {
+          <span class="string">"page_number"</span>: 0,
+          <span class="string">"extracted_data"</span>: {
+            <span class="string">"Title"</span>: <span class="string">"Annual Report"</span>,
+            <span class="string">"Date"</span>: <span class="string">"2025-01-01"</span>
+          },
+          <span class="string">"boxes"</span>: [
+            {
+              <span class="string">"column_name"</span>: <span class="string">"Title"</span>,
+              <span class="string">"x"</span>: 0.1,
+              <span class="string">"y"</span>: 0.05,
+              <span class="string">"width"</span>: 0.5,
+              <span class="string">"height"</span>: 0.04,
+              <span class="string">"extracted_text"</span>: <span class="string">"Annual Report"</span>
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  <span class="string">"columns"</span>: [
+    { <span class="string">"name"</span>: <span class="string">"Title"</span>, <span class="string">"visible"</span>: true },
+    { <span class="string">"name"</span>: <span class="string">"Date"</span>, <span class="string">"visible"</span>: true }
+  ],
+  <span class="string">"last_saved_time"</span>: <span class="string">"2025-06-15T14:30:00"</span>,
+  <span class="string">"last_selected_file"</span>: <span class="string">"C:/docs/report.pdf"</span>,
+  <span class="string">"last_selected_page"</span>: 0
+}</code></pre>
+        </div>
+    </details>
+</section>
+
+<!-- ==================== TEST CASES ==================== -->
+<section id="test-cases">
+    <h2>Test Cases</h2>
+    
+    <h3>Running Tests</h3>
+    <pre><code><span class="comment"># Run all tests</span>
+cd Function/Identification
+python -m pytest Test/ -v
+
+<span class="comment"># Run specific test file</span>
+python -m pytest Test/test_data_models.py -v
+
+<span class="comment"># Run with coverage report</span>
+python -m pytest Test/ -v --tb=short</code></pre>
+    
+    <h3>Test Suites</h3>
+    
+    <details>
+        <summary>test_data_models.py — Data Model Tests</summary>
+        <div>
+            <table>
+                <tr><th>Test Class</th><th>Test Cases</th><th>Validates</th></tr>
+                <tr><td>TestBoxInfo</td><td>8 tests</td><td>Creation, serialization, coordinate conversion</td></tr>
+                <tr><td>TestExtractedDataColumn</td><td>3 tests</td><td>Creation, visibility, serialization</td></tr>
+                <tr><td>TestPageData</td><td>7 tests</td><td>Box CRUD, data clearing, serialization</td></tr>
+                <tr><td>TestPDFFileInfo</td><td>3 tests</td><td>Creation, page lookup, serialization</td></tr>
+                <tr><td>TestProjectData</td><td>9 tests</td><td>CRUD, JSON save/load, column management</td></tr>
+            </table>
+        </div>
+    </details>
+    
+    <details>
+        <summary>test_pdf_processing.py — PDF Processing Tests</summary>
+        <div>
+            <table>
+                <tr><th>Test Class</th><th>Test Cases</th><th>Validates</th></tr>
+                <tr><td>TestFindPDFFiles</td><td>5 tests</td><td>Directory walking, filtering, sorting</td></tr>
+                <tr><td>TestGetPDFInfo</td><td>3 tests</td><td>Metadata extraction, error handling</td></tr>
+                <tr><td>TestRenderPDFPage</td><td>5 tests</td><td>Page rendering, zoom, invalid inputs</td></tr>
+                <tr><td>TestGetPageDimensions</td><td>2 tests</td><td>Page dimensions, invalid page</td></tr>
+                <tr><td>TestExtractText*</td><td>5 tests</td><td>Text extraction from regions</td></tr>
+                <tr><td>TestCheckPageHasText</td><td>3 tests</td><td>Text presence detection</td></tr>
+            </table>
+        </div>
+    </details>
+    
+    <details>
+        <summary>test_excel_export.py — Excel Export Tests</summary>
+        <div>
+            <table>
+                <tr><th>Test Case</th><th>Validates</th></tr>
+                <tr><td>test_creates_file</td><td>File creation succeeds</td></tr>
+                <tr><td>test_sheet_names</td><td>Both sheets present</td></tr>
+                <tr><td>test_file_list_headers</td><td>Correct column headers</td></tr>
+                <tr><td>test_file_list_data</td><td>File data exported correctly</td></tr>
+                <tr><td>test_page_list_data</td><td>Page data with custom columns</td></tr>
+                <tr><td>test_empty_project</td><td>Handles empty data gracefully</td></tr>
+            </table>
+        </div>
+    </details>
+    
+    <details>
+        <summary>test_ui_components.py — UI Component Tests</summary>
+        <div>
+            <table>
+                <tr><th>Test Class</th><th>Test Cases</th><th>Validates</th></tr>
+                <tr><td>TestPDFTreeView</td><td>5 tests</td><td>Tree population, selection</td></tr>
+                <tr><td>TestDataTable</td><td>5 tests</td><td>Table population, cell values, updates</td></tr>
+                <tr><td>TestPDFViewer</td><td>10 tests</td><td>Zoom, boxes, highlighting, centering &amp; table-click focus</td></tr>
+            </table>
+        </div>
+    </details>
+</section>
+
+<!-- ==================== CODE REVIEW 2026-02-18 ==================== -->
+<section id="code-review">
+    <h2>Code Review &amp; Bug Fix Log (2026-02-18)</h2>
+    <p>
+        A systematic review was performed on 2026-02-18 covering four areas:
+        logical correctness, data storage robustness, documentation completeness,
+        and private information audit. All issues are listed below with their
+        resolution status. The full report is also available as
+        <code>documentation/review_2026-02-18.md</code>.
+    </p>
+
+    <details open>
+        <summary><strong>Logical Issues</strong></summary>
+        <table>
+            <thead><tr><th>#</th><th>File</th><th>Description</th><th>Severity</th><th>Fix</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td>L1</td>
+                    <td><code>ui/main_window.py</code></td>
+                    <td><code>_update_ocr_status()</code> was never called — the OCR indicator always showed <em>OCR: unknown</em>.</td>
+                    <td>Medium</td>
+                    <td>Called in <code>__init__</code> and <code>_on_import_finished</code>.</td>
+                </tr>
+                <tr>
+                    <td>L2</td>
+                    <td><code>ui/main_window.py</code></td>
+                    <td>After background text recognition completed, the PDF viewer boxes were not refreshed for the currently displayed page.</td>
+                    <td>Medium</td>
+                    <td><code>_on_recognize_finished</code> now calls <code>pdf_viewer.set_boxes(page.boxes)</code> for the current page.</td>
+                </tr>
+                <tr>
+                    <td>L3</td>
+                    <td><code>ui/main_window.py</code></td>
+                    <td><em>Apply Box</em> status message reported N pages including the source page (which is skipped), giving an off-by-one count.</td>
+                    <td>Low</td>
+                    <td>Tracks <code>applied</code> counter separately; message now shows pages actually modified.</td>
+                </tr>
+                <tr>
+                    <td>L4</td>
+                    <td><code>ui/pdf_viewer.py</code> — <code>PDFViewerCanvas.wheelEvent</code></td>
+                    <td>Wheel zoom used additive <code>±0.05</code> float steps while the spin box used integer 5% steps. <code>int()</code> truncation caused drift over many scroll events.</td>
+                    <td>Low</td>
+                    <td>Wheel now works in integer percent (<code>round(zoom*100) ± 5</code>) matching the spin box exactly.</td>
+                </tr>
+                <tr>
+                    <td>L5</td>
+                    <td><code>ui/main_window.py</code></td>
+                    <td>OCR status not updated after first import.</td>
+                    <td>Low</td>
+                    <td>Fixed with L1 — <code>_update_ocr_status()</code> called in <code>_on_import_finished</code>.</td>
+                </tr>
+                <tr>
+                    <td>L6</td>
+                    <td><code>models/data_models.py</code> — <code>PDFFileInfo.get_page</code></td>
+                    <td>O(n) linear page lookup called inside recognition loops. Documented as a known limitation for very large PDFs.</td>
+                    <td>Low</td>
+                    <td>Documented. A dict-keyed approach is recommended for future optimisation.</td>
+                </tr>
+                <tr>
+                    <td>L7</td>
+                    <td><code>ui/data_table.py</code></td>
+                    <td>The <code>_editing</code> flag protects against infinite <code>cellChanged</code> loops but is a fragile coupling. Documented.</td>
+                    <td>Info</td>
+                    <td>Behaviour is correct; documented as a known coupling to preserve for maintainers.</td>
+                </tr>
+            </tbody>
+        </table>
+    </details>
+
+    <details open>
+        <summary><strong>Data Storage Robustness</strong></summary>
+        <table>
+            <thead><tr><th>#</th><th>File</th><th>Description</th><th>Severity</th><th>Fix</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td>D1</td>
+                    <td><code>models/data_models.py</code> — <code>save_to_json</code></td>
+                    <td>Direct <code>open(..., "w")</code> would leave a corrupted JSON file if the application crashed mid-write.</td>
+                    <td>High</td>
+                    <td>Replaced with atomic write pattern: write to a sibling temp file via <code>tempfile.mkstemp</code>, then <code>os.replace(tmp, dest)</code>. The original file is only replaced once the new content is fully flushed.</td>
+                </tr>
+                <tr>
+                    <td>D2</td>
+                    <td><code>models/data_models.py</code> — <code>load_from_json</code> / <code>from_dict</code></td>
+                    <td>No schema version field — silently used defaults for any missing or renamed keys. A newer file opened in an older app gave no warning.</td>
+                    <td>Medium</td>
+                    <td>Added <code>"version": 1</code> field to saved JSON. <code>from_dict</code> raises <code>ValueError</code> if <code>saved_version &gt; _SCHEMA_VERSION</code>. <code>_on_load</code> in the UI catches this and shows a clear "Incompatible File" dialog.</td>
+                </tr>
+                <tr>
+                    <td>D3</td>
+                    <td><code>models/data_models.py</code> — <code>PDFFileInfo.file_path</code></td>
+                    <td>Absolute OS-specific paths stored in project JSON. Not portable across machines or after folder moves.</td>
+                    <td>Medium</td>
+                    <td>Documented as a known limitation. A future improvement would store paths relative to the JSON file and resolve them on load.</td>
+                </tr>
+                <tr>
+                    <td>D4</td>
+                    <td><code>models/data_models.py</code></td>
+                    <td>No file lock — rapid double-save could race on the same file. Low-risk for a single-user desktop app.</td>
+                    <td>Low</td>
+                    <td>Documented. The atomic write pattern (D1) mitigates partial-write corruption even if a race occurs.</td>
+                </tr>
+                <tr>
+                    <td>D5</td>
+                    <td><code>models/data_models.py</code> — <code>save_to_json</code></td>
+                    <td><code>time.strftime</code> produced local-time timestamps with no timezone offset, making them ambiguous.</td>
+                    <td>Low</td>
+                    <td>Replaced with <code>datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")</code> — UTC ISO-8601 with explicit <code>Z</code> suffix.</td>
+                </tr>
+                <tr>
+                    <td>D6</td>
+                    <td><code>ui/main_window.py</code> — <code>_on_export_excel</code></td>
+                    <td><code>PermissionError</code> (target Excel file open in Excel) showed an opaque OS error string.</td>
+                    <td>Low</td>
+                    <td>Added <code>except PermissionError</code> branch with user-friendly message: "The file may already be open in Excel. Please close it and try again."</td>
+                </tr>
+            </tbody>
+        </table>
+    </details>
+
+    <details open>
+        <summary><strong>Documentation Completeness</strong></summary>
+        <table>
+            <thead><tr><th>#</th><th>Item</th><th>Description</th><th>Fix</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td>C1</td>
+                    <td>OCR label colour</td>
+                    <td>Specification required green for <em>OCR: on</em> and red for <em>OCR: off</em>. Implementation only set text, no colour.</td>
+                    <td><code>_update_ocr_status</code> now applies <code>color: green</code> / <code>color: red</code> via <code>setStyleSheet</code>.</td>
+                </tr>
+                <tr>
+                    <td>C2</td>
+                    <td>Progress bar for sync operations</td>
+                    <td>Specification required a progress bar for Clear Data and Export to Excel. These ran synchronously with no visual feedback.</td>
+                    <td>Both operations now drive <code>_show_progress</code>: Clear Data iterates with per-page progress; Export shows a 0→1 pulse with <code>processEvents()</code>.</td>
+                </tr>
+                <tr>
+                    <td>C3</td>
+                    <td><code>README.md</code></td>
+                    <td>No top-level README existed. New developers had no entry point.</td>
+                    <td>Created <code>README.md</code> with features, requirements, installation, usage, project structure, and test instructions.</td>
+                </tr>
+                <tr>
+                    <td>C4</td>
+                    <td><code>requirements.txt</code></td>
+                    <td>Uses <code>&gt;=</code> constraints — builds are not fully reproducible.</td>
+                    <td>Documented. Recommendation: run <code>pip freeze &gt; requirements-lock.txt</code> for a pinned lock file.</td>
+                </tr>
+            </tbody>
+        </table>
+    </details>
+
+    <details open>
+        <summary><strong>Private Information Audit</strong></summary>
+        <table>
+            <thead><tr><th>Finding</th><th>Result</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td>Credentials / API keys / passwords in source code</td>
+                    <td>✅ None found</td>
+                </tr>
+                <tr>
+                    <td>Personal data (names, emails, IDs) in source or tests</td>
+                    <td>✅ None found. All tests use <code>tempfile</code> fixtures.</td>
+                </tr>
+                <tr>
+                    <td>Internal server addresses / network paths</td>
+                    <td>✅ None found</td>
+                </tr>
+                <tr>
+                    <td>Absolute paths in saved project JSON (runtime artefact)</td>
+                    <td>⚠️ <code>PDFFileInfo.file_path</code> stores absolute OS paths. Not in source code but present in any exported <code>.json</code> project file. Users should be aware not to share project JSON files if local path privacy is a concern.</td>
+                </tr>
+            </tbody>
+        </table>
+    </details>
+
+    <details>
+        <summary><strong>Known Limitations (Documented, Not Fixed)</strong></summary>
+        <ul>
+            <li><strong>L6 — O(n) page lookup:</strong> <code>PDFFileInfo.get_page()</code> is a linear search. For PDFs with hundreds of pages called in a recognition loop this degrades performance. Future improvement: replace <code>pages: List[PageData]</code> with <code>pages: Dict[int, PageData]</code>.</li>
+            <li><strong>D3 — Non-portable paths:</strong> Project JSON files store absolute paths. Moving the PDF folder or using the project on another machine will break all file references. Future improvement: store paths relative to the JSON file.</li>
+            <li><strong>D4 — No file lock:</strong> A race between two simultaneous saves is theoretically possible. The atomic write pattern (D1) prevents partial-write corruption but does not prevent the last-writer-wins overwrite.</li>
+            <li><strong>C4 — Unpinned dependencies:</strong> <code>requirements.txt</code> uses <code>&gt;=</code> constraints. Run <code>pip freeze &gt; requirements-lock.txt</code> for reproducible deployments.</li>
+            <li><strong>L7 — <code>_editing</code> flag coupling:</strong> The <code>_editing = True</code> sentinel in <code>DataTable</code> suppresses <code>cellChanged</code> re-entrancy. The guard works correctly but its implicit contract must be respected by all future <code>refresh()</code> callers.</li>
+        </ul>
+    </details>
+</section>
+
+
+    <h2>Troubleshooting</h2>
+    
+    <details>
+        <summary>❌ "ModuleNotFoundError: No module named 'fitz'"</summary>
+        <div>
+            <p><strong>Cause:</strong> PyMuPDF is not installed.</p>
+            <p><strong>Solution:</strong></p>
+            <pre><code>pip install PyMuPDF</code></pre>
+        </div>
+    </details>
+    
+    <details>
+        <summary>❌ "ModuleNotFoundError: No module named 'PyQt5'"</summary>
+        <div>
+            <p><strong>Cause:</strong> PyQt5 is not installed.</p>
+            <p><strong>Solution:</strong></p>
+            <pre><code>pip install PyQt5</code></pre>
+        </div>
+    </details>
+    
+    <details>
+        <summary>❌ OCR returns empty text</summary>
+        <div>
+            <p><strong>Possible causes:</strong></p>
+            <ul>
+                <li>Tesseract is not installed or not in PATH (application shows <code>OCR: off</code> in status bar)</li>
+                <li>Box region is too small or doesn't cover text</li>
+                <li>Image quality is too low</li>
+            </ul>
+            <p><strong>Solutions:</strong></p>
+            <ul>
+                <li>Check the bottom status bar — if it shows <code>OCR: off</code> install or configure Tesseract and restart the app</li>
+                <li>Draw the box tightly around the text area</li>
+                <li>Use higher-quality source PDFs</li>
+            </ul>
+            <p><strong>Note:</strong> Extracted text is regularized automatically (full-width → half-width, dash normalization). If you need the original glyphs, edit the cell manually after extraction.</p>
+        <div>
+            <p><strong>Possible causes:</strong></p>
+            <ul>
+                <li>File is corrupt or encrypted</li>
+                <li>File path contains special characters</li>
+                <li>File is locked by another application</li>
+            </ul>
+            <p><strong>Solutions:</strong></p>
+            <ul>
+                <li>Ensure the PDF can be opened in a regular PDF viewer</li>
+                <li>Move the file to a path without special characters</li>
+                <li>Close other applications that may have the file open</li>
+            </ul>
+        </div>
+    </details>
+    
+    <details>
+        <summary>❌ Excel export fails</summary>
+        <div>
+            <p><strong>Possible causes:</strong></p>
+            <ul>
+                <li>openpyxl not installed</li>
+                <li>Output file is open in Excel</li>
+                <li>Write permission denied</li>
+            </ul>
+            <p><strong>Solutions:</strong></p>
+            <ul>
+                <li><code>pip install openpyxl</code></li>
+                <li>Close the Excel file before exporting</li>
+                <li>Choose a different output location</li>
+            </ul>
+        </div>
+    </details>
+    
+    <details>
+        <summary>❌ Application window is too small / DPI issues</summary>
+        <div>
+            <p><strong>Solution:</strong> The app enables High DPI scaling by default. If issues persist,
+            try setting the environment variable:</p>
+            <pre><code>set QT_SCALE_FACTOR=1.5
+python main.py</code></pre>
+        </div>
+    </details>
+    
+    <details>
+        <summary>❌ Text extracted incorrectly / wrong position</summary>
+        <div>
+            <p><strong>Cause:</strong> Box position may not align with the actual text on the page.</p>
+            <p><strong>Solutions:</strong></p>
+            <ul>
+                <li>Zoom in for more precise box placement</li>
+                <li>Ensure the box covers the complete text area</li>
+                <li>The text may be in a different encoding — check the PDF source</li>
+            </ul>
+        </div>
+    </details>
+</section>
+
+</div>
+
+<!-- Scroll to Top Button -->
+<button class="scroll-top" id="scrollTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+
+<script>
+    // Scroll to top button visibility
+    window.addEventListener('scroll', () => {
+        document.getElementById('scrollTop').style.display = 
+            window.scrollY > 300 ? 'block' : 'none';
+    });
+    
+    // Active nav link highlighting
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('.sidebar a[href^="#"]');
+    
+    window.addEventListener('scroll', () => {
+        let current = '';
+        sections.forEach(section => {
+            const top = section.offsetTop - 100;
+            if (window.scrollY >= top) {
+                current = section.id;
+            }
+        });
+        
+        navLinks.forEach(link => {
+            link.classList.remove('active');
+            if (link.getAttribute('href') === '#' + current) {
+                link.classList.add('active');
+            }
+        });
+    });
+    
+    // Search/filter navigation
+    function filterNav() {
+        const term = document.getElementById('search').value.toLowerCase();
+        navLinks.forEach(link => {
+            const text = link.textContent.toLowerCase();
+            link.style.display = text.includes(term) ? 'block' : 'none';
+        });
+        // Always show section headers
+        document.querySelectorAll('.sidebar .section-header').forEach(h => {
+            h.style.display = term ? 'none' : 'block';
+        });
+    }
+    
+    // Smooth scroll for nav links
+    // (code-review section added 2026-02-18)
+    navLinks.forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const target = document.querySelector(link.getAttribute('href'));
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+            // Close mobile menu
+            document.querySelector('.sidebar').classList.remove('open');
+        });
+    });
+</script>
+
+</body>
+</html>
