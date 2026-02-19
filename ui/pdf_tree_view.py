@@ -34,7 +34,7 @@ class PDFTreeView(QWidget):
     
     Signals:
         page_selected(str, int): Emitted with (file_path, page_number) when
-            a page is clicked.
+            a page is double-clicked.
         selection_changed(): Emitted when the selection state changes.
     """
     
@@ -83,7 +83,9 @@ class PDFTreeView(QWidget):
         self.tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.tree.setAnimated(True)
         self.tree.setIndentation(20)
-        self.tree.itemClicked.connect(self._on_item_clicked)
+        # Single-click should only change selection so the user can multi-select
+        # without changing the currently displayed page. Viewing happens on double-click.
+        self.tree.itemDoubleClicked.connect(self._on_item_double_clicked)
         self.tree.itemSelectionChanged.connect(self._on_selection_changed)
         
         layout.addWidget(self.tree)
@@ -197,14 +199,15 @@ class PDFTreeView(QWidget):
             return None
         
         return (file_path, page_num)
-    
-    def _on_item_clicked(self, item: QTreeWidgetItem, column: int) -> None:
-        """Handle tree item click to emit page_selected."""
+
+
+    def _on_item_double_clicked(self, item: QTreeWidgetItem, column: int) -> None:
+        """Handle double-click to emit page_selected for viewing the page."""
         file_path = item.data(0, Qt.UserRole)
         page_num = item.data(0, Qt.UserRole + 1)
-        
+
         if page_num == -1:
-            # Clicked on file - select first page
+            # Double-clicked on file - select first page
             if item.childCount() > 0:
                 child = item.child(0)
                 self.page_selected.emit(

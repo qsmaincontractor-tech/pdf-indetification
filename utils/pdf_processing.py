@@ -33,11 +33,17 @@ def regularize_text(text: str) -> str:
     # Normalize unicode characters (handles full-width to half-width conversion)
     text = unicodedata.normalize('NFKC', text)
     
-    # Specific replacements
+    # Specific replacements for common OCR/normalization issues.
+    # TODO: Review carefully before modifying, as these mappings affect downstream text processing.
     replacements = {
         "—": "-",  # Em dash to hyphen
         "–": "-",  # En dash to hyphen
         "−": "-",  # Minus sign to hyphen
+        "--": "-",  # Double hyphen to single hyphen. Since long dashes may be represented as multiple hyphens, this can help clean them up.
+        "O0": "0",  # Common OCR misread of 'O' as '0'
+        "OO": "0",  # Common OCR misread of 'OO' as '0'
+        "0O": "0",  # Common OCR misread of '0O' as '0'
+        "/": "_",  # Slash to underscore (optional, depending on use case)
     }
     
     for old, new in replacements.items():

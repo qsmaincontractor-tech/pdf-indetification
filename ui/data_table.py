@@ -37,6 +37,32 @@ from typing import Optional, List, Tuple
 from models.data_models import ProjectData
 
 
+# QTableWidgetItem subclass that supports a separate sort key (used for numeric sorting)
+class SortableTableWidgetItem(QTableWidgetItem):
+    """Table item that will compare using an explicit sort-key when present.
+
+    - Store the sort key in a dedicated custom item data role (Qt.UserRole + 3)
+    - __lt__ will prefer that key for comparison so numeric columns sort
+      numerically while still displaying formatted text.
+    """
+    SORT_KEY_ROLE = Qt.UserRole + 3
+
+    def __init__(self, text: str = "", sort_key=None):
+        super().__init__(text)
+        if sort_key is not None:
+            self.setData(self.SORT_KEY_ROLE, sort_key)
+
+    def __lt__(self, other: QTableWidgetItem) -> bool:  # type: ignore[override]
+        a = self.data(self.SORT_KEY_ROLE)
+        b = other.data(self.SORT_KEY_ROLE)
+        if a is not None and b is not None:
+            try:
+                return a < b
+            except Exception:
+                pass
+        return super().__lt__(other)
+
+
 class DataTable(QWidget):
     """
     Table widget for displaying and editing extracted data.
@@ -172,8 +198,8 @@ class DataTable(QWidget):
                 item_fp.setData(Qt.UserRole + 1, page.page_number)
                 self.table.setItem(row, self.COL_FILE_PATH, item_fp)
                 
-                # Page Number (read-only)
-                item_pn = QTableWidgetItem(str(page.page_number + 1))
+                # Page Number (read-only) — use SortableTableWidgetItem so sorting is numeric
+                item_pn = SortableTableWidgetItem(str(page.page_number + 1), sort_key=(page.page_number + 1))
                 item_pn.setFlags(item_pn.flags() & ~Qt.ItemIsEditable)
                 item_pn.setData(Qt.UserRole, pdf_file.file_path)
                 item_pn.setData(Qt.UserRole + 1, page.page_number)

@@ -73,6 +73,31 @@ class TestPDFTreeView:
         tree.populate(project_with_data)
         file_item = tree.tree.topLevelItem(0)
         assert file_item.childCount() == 2
+
+    def test_page_column_sorts_numerically(self):
+        """Ensure the `Page #` column sorts by integer value, not string."""
+        from models.data_models import PDFFileInfo, PageData
+
+        project = ProjectData()
+        # Create a file with pages in order: 1, 10, 2 (displayed)
+        file = PDFFileInfo(file_name="s.pdf", file_path="C:/s.pdf", num_pages=3, file_size=0)
+        # page_number is zero-based internally
+        p1 = PageData(page_number=0)   # displays '1'
+        p2 = PageData(page_number=9)   # displays '10'
+        p3 = PageData(page_number=1)   # displays '2'
+        file.pages = [p1, p2, p3]
+        project.pdf_files = [file]
+
+        table = DataTable()
+        table.set_project_data(project)
+
+        # Trigger ascending sort on Page # column
+        table.table.sortItems(table.COL_PAGE_NUM, Qt.AscendingOrder)
+
+        # Collect displayed page numbers after sort
+        displayed = [int(table.table.item(r, table.COL_PAGE_NUM).text()) for r in range(table.table.rowCount())]
+        assert displayed == [1, 2, 10]  # numeric sort order
+
     
     def test_get_selected_pages_empty(self):
         """Test getting selections when nothing is selected."""
@@ -115,6 +140,40 @@ class TestPDFTreeView:
         # Expand all via button
         tree.btn_expand_all.click()
         assert file_item.isExpanded() is True
+
+    def test_double_click_emits_page_selected(self, project_with_data):
+        """Double-clicking a page (or file) should emit page_selected for viewing."""
+        tree = PDFTreeView()
+        tree.populate(project_with_data)
+
+        file_item = tree.tree.topLevelItem(0)
+        page_item = file_item.child(0)
+
+        captured = []
+        tree.page_selected.connect(lambda fp, pn: captured.append((fp, pn)))
+
+        # simulate double-click on page
+        tree._on_item_double_clicked(page_item, 0)
+        assert captured == [("C:/test/test.pdf", 0)]
+
+        # simulate double-click on file (should select first page)
+        captured.clear()
+        tree._on_item_double_clicked(file_item, 0)
+        assert captured == [("C:/test/test.pdf", 0)]
+
+    def test_single_click_does_not_emit_page_selected(self, project_with_data):
+        """Single-click should change selection only and must NOT emit page_selected."""
+        tree = PDFTreeView()
+        tree.populate(project_with_data)
+
+        file_item = tree.tree.topLevelItem(0)
+        page_item = file_item.child(0)
+
+        captured = []
+        tree.page_selected.connect(lambda fp, pn: captured.append((fp, pn)))
+
+        tree._on_item_clicked(page_item, 0)
+        assert captured == []
 
 
 class TestDataTable:

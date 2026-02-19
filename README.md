@@ -11,6 +11,7 @@ A desktop application for extracting structured text data from PDF files using v
 - **Project save/load** — Save all box positions, extracted data, and settings to a JSON file and reload later
 - **Excel export** — Export all data to a formatted `.xlsx` file with two sheets: PDF File List and PDF Page List
 - **3-column UI** — PDF tree view | Data table | PDF page viewer with zoom, pan, and box editing
+  - Page selection behaviour: single-click changes selection only (so you can Ctrl/Shift multi-select pages); **double-click** a page in the PDF Page List to open it in the viewer.
 
 ## Requirements
 

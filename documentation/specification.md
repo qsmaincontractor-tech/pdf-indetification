@@ -4,13 +4,13 @@
 - If no vector-based text data can be extracted from the PDF page, then OCR will be applied to extract the text data
 
 #UI Design:
-1. All ui compoenets will be saved in ui folder Function\Identification\ui
+1. All ui components will be saved in ui folder Function\Identification\ui
 2. 3 columns design + Top Toolbar + Bottom status bar:
 
     1st column: PDF Page List
         - Tree view to show the list of PDF pages for imported PDF files
         - Header contains <strong>Expand All</strong> / <strong>Collapse All</strong> buttons to expand/collapse file entries
-        - When selecting a PDF page, the content of the page will be shown in the 3rd column
+        - **Selection behaviour:** single-click changes selection only (enables Ctrl/Shift multi-select); **double-click** a PDF page to display its content in the 3rd column
         - the 2nd column will be highlighted with the extracted data of the selected PDF page
         - File nodes are expanded by default when populated
 
