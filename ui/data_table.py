@@ -284,16 +284,26 @@ class DataTable(QWidget):
         return (file_path, page_number, column_name or "")
     
     def _on_cell_clicked(self, row: int, column: int) -> None:
-        """Handle cell click to emit cell_selected signal."""
+        """Handle cell click to emit cell_selected signal.
+
+        Previously the signal was only emitted for "data columns" (user-defined
+        extracted fields). A click on the fixed File Name / File Path / Page #
+        columns was ignored. To satisfy the requirement that clicking anywhere on
+        a row should immediately switch the PDF viewer, we now emit the signal for
+        any cell.  If the column has no associated name the third argument will be
+        an empty string.
+        """
         item = self.table.item(row, column)
         if item is None:
             return
-        
+
         file_path = item.data(Qt.UserRole)
         page_number = item.data(Qt.UserRole + 1)
-        column_name = item.data(Qt.UserRole + 2)
-        
-        if file_path and page_number is not None and column_name:
+        column_name = item.data(Qt.UserRole + 2) or ""
+
+        # Only emit when we at least have a valid file/page pair.  The column
+        # name may be empty for fixed columns.
+        if file_path and page_number is not None:
             self.cell_selected.emit(file_path, page_number, column_name)
     
     def _on_cell_changed(self, row: int, column: int) -> None:

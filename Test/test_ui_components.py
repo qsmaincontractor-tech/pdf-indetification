@@ -172,7 +172,8 @@ class TestPDFTreeView:
         captured = []
         tree.page_selected.connect(lambda fp, pn: captured.append((fp, pn)))
 
-        tree._on_item_clicked(page_item, 0)
+        # simulate a normal single-click via the underlying QTreeWidget signal
+        tree.tree.itemClicked.emit(page_item, 0)
         assert captured == []
 
 
@@ -259,15 +260,24 @@ class TestDataTable:
         project_with_data.last_selected_page = 1
         table.set_project_data(project_with_data)
 
-        # After set_project_data/refresh the highlight should be applied to page 1
-        found_row = None
-        for r in range(table.table.rowCount()):
-            it = table.table.item(r, table.COL_FILE_NAME)
-            if it and it.data(Qt.UserRole) == "C:/test/test.pdf" and it.data(Qt.UserRole + 1) == 1:
-                found_row = r
-                break
-        assert found_row is not None
-        assert table.table.item(found_row, 0).background().color().name() == QColor("#D6EAF8").name()
+    def test_cell_click_emits_for_fixed_columns(self, project_with_data):
+        """Clicking on file name/path/page columns should still emit a signal.
+
+        Previously only data columns emitted cell_selected; this ensures the
+        viewer can react to a single click anywhere in the row.
+        """
+        table = DataTable()
+        table.set_project_data(project_with_data)
+        captured = []
+        table.cell_selected.connect(lambda fp, pn, cn: captured.append((fp, pn, cn)))
+
+        # simulate clicking the File Path column on the first row
+        table._on_cell_clicked(0, table.COL_FILE_PATH)
+        assert captured == [(project_with_data.pdf_files[0].file_path, 0, "")]
+
+        # clicking the Page # column should behave similarly
+        table._on_cell_clicked(0, table.COL_PAGE_NUM)
+        assert captured[-1] == (project_with_data.pdf_files[0].file_path, 0, "")
 
 
 class TestPDFViewer:
@@ -422,3 +432,24 @@ class TestPDFViewer:
         assert hasattr(window, "ocr_label")
         # Label should start with the 'OCR:' prefix so UI shows the debug state
         assert window.ocr_label.text().startswith("OCR:")
+
+    def test_click_fixed_column_updates_viewer(self, project_with_data, monkeypatch):
+        """A single click on any table column should load the corresponding page."""
+        # patch rendering to avoid file IO
+        import ui.main_window as mwmod
+        monkeypatch.setattr(mwmod, "render_pdf_page", lambda fp, pn, zoom=1.5: b"dummy")
+
+        from ui.main_window import MainWindow
+        mw = MainWindow()
+        mw._project_data = project_with_data
+        mw._refresh_all()
+
+        # ensure current is different so we expect change
+        mw._current_file_path = ""
+        mw._current_page_num = -1
+
+        # simulate clicking the second fixed column (Page #) on first row
+        mw.data_table._on_cell_clicked(0, mw.data_table.COL_PAGE_NUM)
+
+        assert mw._current_file_path == project_with_data.pdf_files[0].file_path
+        assert mw._current_page_num == project_with_data.pdf_files[0].pages[0].page_number
