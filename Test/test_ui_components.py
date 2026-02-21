@@ -300,6 +300,41 @@ class TestDataTable:
         fp = project_with_data.pdf_files[0].file_path
         assert captured == [(fp, 0, "Title")]
 
+    def test_table_delete_refreshes_viewer(self, project_with_data):
+        """Deleting a cell via the table should remove the box from the viewer."""
+        # add a box to first page under 'Title'
+        pdf_file = project_with_data.pdf_files[0]
+        page = pdf_file.pages[0]
+        page.boxes.append(BoxInfo(column_name="Title", x=0.2, y=0.2, width=0.3, height=0.3))
+
+        from ui.main_window import MainWindow
+        mw = MainWindow()
+        mw._project_data = project_with_data
+        mw._refresh_all()
+
+        # set current page and load image so viewer has something to display
+        mw._current_file_path = pdf_file.file_path
+        mw._current_page_num = page.page_number
+        from PyQt5.QtGui import QPixmap, QColor
+        pix = QPixmap(100, 100);
+        pix.fill(QColor("white"))
+        mw.pdf_viewer.canvas._pixmap = pix
+        mw.pdf_viewer.canvas._update_size()
+        mw.pdf_viewer.set_boxes(page.boxes)
+
+        # select the Title cell in the table and press delete
+        row = 0
+        col = mw.data_table.FIXED_COL_COUNT
+        mw.data_table.table.setCurrentCell(row, col)
+        from PyQt5.QtGui import QKeyEvent
+        ev = QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Delete, Qt.NoModifier)
+        QApplication.sendEvent(mw.data_table.table, ev)
+
+        # viewer should no longer contain the box
+        assert mw.pdf_viewer.canvas.get_boxes() == []
+        # model page should also have no boxes
+        assert page.boxes == []
+
 
 class TestPDFViewer:
     """Tests for the PDF Viewer widget."""

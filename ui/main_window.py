@@ -609,6 +609,14 @@ class MainWindow(QMainWindow):
                 self.data_table.update_cell_value(
                     file_path, page_number, column_name, "",
                 )
+
+                # refresh the viewer content if the deleted box is on the
+                # currently displayed page.  We already updated the model above
+                # so simply push the new box list to the viewer and clear any
+                # highlight.  This ensures the third-column image stays in sync
+                # with the table.
+                if file_path == self._current_file_path and page_number == self._current_page_num:
+                    self.pdf_viewer.set_boxes(page.boxes)
                 self._update_status(f"Box for '{column_name}' deleted")
     
     def _on_box_selected_in_viewer(self, column_name: str) -> None:
