@@ -279,6 +279,27 @@ class TestDataTable:
         table._on_cell_clicked(0, table.COL_PAGE_NUM)
         assert captured[-1] == (project_with_data.pdf_files[0].file_path, 0, "")
 
+    def test_delete_key_clears_cell_and_emits_signal(self, project_with_data):
+        """Pressing Delete on a selected data cell should clear it and notify."""
+        table = DataTable()
+        table.set_project_data(project_with_data)
+        # choose the first row, first user column (Title)
+        row = 0
+        col = table.FIXED_COL_COUNT
+        table.table.setCurrentCell(row, col)
+        assert table.table.item(row, col).text() == "Hello"
+
+        captured = []
+        table.cell_delete_requested.connect(lambda fp, pn, cn: captured.append((fp, pn, cn)))
+
+        from PyQt5.QtGui import QKeyEvent
+        ev = QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Delete, Qt.NoModifier)
+        QApplication.sendEvent(table.table, ev)
+
+        assert table.table.item(row, col).text() == ""
+        fp = project_with_data.pdf_files[0].file_path
+        assert captured == [(fp, 0, "Title")]
+
 
 class TestPDFViewer:
     """Tests for the PDF Viewer widget."""
@@ -533,6 +554,43 @@ class TestPDFViewer:
             pan = mw.pdf_viewer.canvas._pan_offset
             assert pan != QPointF(0, 0)
 
+    def test_delete_key_integration_with_table(self, project_with_data):
+        """A Delete key press on the data table row should remove the box and clear data."""
+        # prepare page with one box and a non-empty value
+        pdf_file = project_with_data.pdf_files[0]
+        page = pdf_file.pages[0]
+        page.boxes.append(BoxInfo(column_name="Title", x=0.2, y=0.2, width=0.2, height=0.2))
+
+        from ui.main_window import MainWindow
+        mw = MainWindow()
+        mw._project_data = project_with_data
+        mw._refresh_all()
+
+        # pretend same page is already loaded in viewer
+        mw._current_file_path = pdf_file.file_path
+        mw._current_page_num = page.page_number
+
+        # provide pixmap and set boxes so viewer can respond
+        from PyQt5.QtGui import QPixmap, QColor, QKeyEvent
+        pix = QPixmap(200, 200)
+        pix.fill(QColor('white'))
+        mw.pdf_viewer.canvas._pixmap = pix
+        mw.pdf_viewer.canvas._update_size()
+        mw.pdf_viewer.set_boxes(page.boxes)
+
+        # select the corresponding cell in the data table and press Delete
+        row = 0
+        col = mw.data_table.FIXED_COL_COUNT  # Title column
+        mw.data_table.table.setCurrentCell(row, col)
+        ev = QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Delete, Qt.NoModifier)
+        QApplication.sendEvent(mw.data_table.table, ev)
+
+        # after event, page should have no boxes and extracted_data empty
+        assert page.boxes == []
+        assert page.extracted_data.get("Title", "") == ""
+        # data table cell should also have been cleared by update_cell_value
+        assert mw.data_table.table.item(row, col).text() == ""
+
     def test_clear_image(self):
         """Test clearing the image."""
         viewer = PDFViewer()
@@ -562,6 +620,35 @@ class TestPDFViewer:
         # programmatically toggling the table should synchronise back to main toolbar
         mw.data_table.set_single_page_mode(False)
         assert not mw.chk_single_page_mode.isChecked()
+
+    def test_apply_template_triggers_extraction(self, tmp_path, project_with_data):
+        """Applying a template should create boxes and auto-extract text."""
+        from ui.main_window import MainWindow
+        from models.data_models import Template, BoxInfo
+
+        # create a simple project with one pdf file and page
+        mw = MainWindow()
+        mw._project_data = project_with_data
+        mw._refresh_all()
+
+        # inject a template with a single box covering top-left
+        tpl = Template(name="T1", ref_page="dummy", boxes=[BoxInfo(column_name="Col", x=0.0, y=0.0, width=0.1, height=0.1)])
+        mw._project_data.templates.append(tpl)
+        mw._update_template_combo()
+
+        # select first page
+        fp = project_with_data.pdf_files[0].file_path
+        mw.pdf_tree.select_page(fp, 0)
+        mw._on_page_selected(fp, 0)
+
+        # apply the template
+        mw.combo_template.setCurrentText("T1")
+        mw._on_apply_template()
+
+        # after apply the box should exist and extracted data filled
+        page = project_with_data.pdf_files[0].get_page(0)
+        assert "Col" in page.extracted_data
+        assert page.extracted_data["Col"] == mw.data_table.item(0, mw.data_table.FIXED_COL_COUNT).text()
 
     def test_single_page_mode_checkbox_in_main_toolbar(self):
         """The SPM toggle should be part of the main window's top toolbar.
@@ -647,3 +734,83 @@ class TestPDFViewer:
         assert page.boxes == []
         # verify table cell cleared as well
         assert mw.data_table.table.item(0, extracted_col).text() == ""
+
+    # ------------------------------------------------------------------
+    # Text recognition behaviour
+    # ------------------------------------------------------------------
+    def test_recognize_clears_data_when_no_boxes(self, monkeypatch):
+        """Running recognition on pages without any boxes should blank values."""
+        from ui.main_window import MainWindow
+        from PyQt5.QtWidgets import QMessageBox
+
+        # silence message boxes
+        monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: None)
+
+        project = ProjectData()
+        project.add_column("Title")
+        file = PDFFileInfo(file_name="f.pdf", file_path="/f.pdf", num_pages=1, file_size=0)
+        page = PageData(page_number=0)
+        page.extracted_data = {"Title": "old"}
+        file.pages.append(page)
+        project.pdf_files.append(file)
+
+        mw = MainWindow()
+        mw._project_data = project
+        mw._refresh_all()
+
+        mw.pdf_tree.select_page(file.file_path, 0)
+        mw._on_page_selected(file.file_path, 0)
+
+        # initial value present
+        assert mw.data_table.table.item(0, mw.data_table.FIXED_COL_COUNT).text() == "old"
+
+        mw._on_recognize_text()
+
+        assert project.pdf_files[0].pages[0].extracted_data == {}
+        assert mw.data_table.table.item(0, mw.data_table.FIXED_COL_COUNT).text() == ""
+
+    def test_recognize_clears_missing_columns(self, monkeypatch):
+        """Recognition should wipe values for columns that no longer have boxes."""
+        from ui.main_window import MainWindow
+        import ui.main_window as mwmod
+        from PyQt5.QtWidgets import QMessageBox
+
+        monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: None)
+
+        # stub out the worker so we don't spawn threads during the test
+        class DummySignal:
+            def connect(self, *args, **kwargs):
+                pass
+        class DummyWorker:
+            def __init__(self, pages_and_boxes, project_root=None):
+                self.progress = DummySignal()
+                self.text_extracted = DummySignal()
+                self.error = DummySignal()
+                self.finished_recognize = DummySignal()
+            def start(self):
+                pass
+        monkeypatch.setattr(mwmod, "RecognizeWorker", DummyWorker)
+
+        project = ProjectData()
+        project.add_column("Title")
+        project.add_column("Page")
+        file = PDFFileInfo(file_name="f.pdf", file_path="/f.pdf", num_pages=1, file_size=0)
+        page = PageData(page_number=0)
+        page.extracted_data = {"Title": "old1", "Page": "old2"}
+        page.boxes = [BoxInfo(column_name="Title", x=0.1, y=0.1, width=0.1, height=0.1)]
+        file.pages.append(page)
+        project.pdf_files.append(file)
+
+        mw = MainWindow()
+        mw._project_data = project
+        mw._refresh_all()
+        mw.pdf_tree.select_page(file.file_path, 0)
+        mw._on_page_selected(file.file_path, 0)
+
+        mw._on_recognize_text()
+
+        assert project.pdf_files[0].pages[0].extracted_data["Title"] == "old1"
+        assert project.pdf_files[0].pages[0].extracted_data.get("Page", "") == ""
+        col_pos = project.get_column_names().index("Page")
+        cell = mw.data_table.table.item(0, mw.data_table.FIXED_COL_COUNT + col_pos)
+        assert cell.text() == ""

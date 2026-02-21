@@ -295,6 +295,8 @@ class MainWindow(QMainWindow):
         self.pdf_viewer.box_drawn.connect(self._on_box_drawn)
         self.pdf_viewer.box_changed.connect(self._on_box_changed)
         self.pdf_viewer.box_deleted.connect(self._on_box_deleted)
+        # also listen to delete requests coming from the data table
+        self.data_table.cell_delete_requested.connect(self._on_table_cell_deleted)
         self.pdf_viewer.box_selected.connect(self._on_box_selected_in_viewer)
         
         # Template Manager
@@ -466,9 +468,20 @@ class MainWindow(QMainWindow):
         
         for box in template.boxes:
             new_box = copy.deepcopy(box)
-            new_box.extracted_text = ""
+            # perform text extraction immediately after placing the box
+            text = extract_text_from_relative_region(
+                self._current_file_path, self._current_page_num,
+                new_box.x, new_box.y, new_box.width, new_box.height,
+            )
+            new_box.extracted_text = text
             page.set_box_for_column(new_box)
-            
+            page.extracted_data[new_box.column_name] = text
+            # update table cell directly (avoid waiting for selection)
+            self.data_table.update_cell_value(
+                self._current_file_path, self._current_page_num,
+                new_box.column_name, text,
+            )
+        
         self._refresh_all()
         self._on_page_selected(self._current_file_path, self._current_page_num)
         QMessageBox.information(self, "Success", f"Template '{template_name}' applied to current page.")
@@ -572,6 +585,29 @@ class MainWindow(QMainWindow):
                 self.data_table.update_cell_value(
                     self._current_file_path, self._current_page_num,
                     column_name, "",
+                )
+                self._update_status(f"Box for '{column_name}' deleted")
+
+    def _on_table_cell_deleted(self, file_path: str, page_number: int, column_name: str) -> None:
+        """Handle a delete-key request emitted by ``DataTable``.
+
+        This event is triggered when the user has a cell selected in the
+        table and presses the Delete key.  It should have the same effect as
+        deleting the corresponding box in the PDF viewer.
+        """
+        # delegate to the same logic as if the viewer emitted the signal,
+        # but use the explicit coordinates passed by the table.
+        pdf_file = self._project_data.get_file_by_path(file_path) if self._project_data else None
+        if pdf_file:
+            page = pdf_file.get_page(page_number)
+            if page:
+                page.remove_box_for_column(column_name)
+                page.extracted_data.pop(column_name, None)
+
+                # update the table cell (already cleared by table itself,
+                # but do it again to be safe and to keep highlighting correct)
+                self.data_table.update_cell_value(
+                    file_path, page_number, column_name, "",
                 )
                 self._update_status(f"Box for '{column_name}' deleted")
     
@@ -828,16 +864,42 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Info", "No pages selected.")
             return
         
-        # Gather pages with boxes
+        # Gather pages with boxes.  Also clear any existing extracted data
+        # for columns that no longer have a corresponding box on the page.  This
+        # covers two cases:
+        #   * a page previously had extracted values but the user removed the box
+        #     before running recognition again
+        #   * a page has boxes for some columns but not others (e.g. template with
+        #     a subset of defined columns)
+        #
+        # We update the data table as we go so the UI shows blanks immediately.
         pages_and_boxes = []
         for file_path, page_num in selected:
             pdf_file = self._project_data.get_file_by_path(file_path)
-            if pdf_file:
-                page = pdf_file.get_page(page_num)
-                if page and page.boxes:
-                    pages_and_boxes.append((file_path, page_num, page.boxes))
-        
+            if not pdf_file:
+                continue
+            page = pdf_file.get_page(page_num)
+            if not page:
+                continue
+
+            # determine which columns are currently covered by boxes
+            current_cols = {box.column_name for box in page.boxes}
+            # clear any stale data (columns with no box)
+            for col in list(page.extracted_data.keys()):
+                if col not in current_cols:
+                    # wipe the stored value and update the table cell
+                    page.extracted_data[col] = ""
+                    self.data_table.update_cell_value(
+                        file_path, page_num, col, "",
+                    )
+
+            if page.boxes:
+                pages_and_boxes.append((file_path, page_num, page.boxes))
+
+        # If we ended up with no work to do, still refresh the table (cleared
+        # values above) and inform the user.
         if not pages_and_boxes:
+            self.data_table.refresh()
             QMessageBox.information(self, "Info", "No boxes found on selected pages.")
             return
         

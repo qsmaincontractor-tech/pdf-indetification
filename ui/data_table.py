@@ -82,6 +82,9 @@ class DataTable(QWidget):
     """
     
     cell_selected = pyqtSignal(str, int, str)
+    # emitted when the user presses the Delete key while a data cell is selected.
+    # parameters are (file_path, page_number, column_name)
+    cell_delete_requested = pyqtSignal(str, int, str)
     data_edited = pyqtSignal(str, int, str, str)
     page_navigated = pyqtSignal(str, int)  # Emitted when SPM prev/next navigation changes page
     single_page_mode_changed = pyqtSignal(bool)  # signal when SPM state is toggled
@@ -116,6 +119,9 @@ class DataTable(QWidget):
         self.btn_add_column.clicked.connect(self._on_add_column)
         self.btn_remove_column.clicked.connect(self._on_remove_column)
         self.btn_columns_visibility.clicked.connect(self._on_columns_visibility)
+
+        # allow catching key presses (delete) on the table
+        self.table.installEventFilter(self)
     
     def set_project_data(self, project_data: ProjectData) -> None:
         """
@@ -524,6 +530,38 @@ class DataTable(QWidget):
                 self._project_data.remove_column(name)
                 self.refresh()
     
+    def eventFilter(self, obj, event):
+        """Catch key presses on the underlying QTableWidget.
+
+        We override the event filter rather than subclassing QTableWidget so we
+        can intercept the Delete key when the table has focus.  When Delete is
+        pressed and a data cell is selected we clear the cell, emit the normal
+        :signal:`data_edited` event (via the cellChanged handling) and also
+        notify listeners with :signal:`cell_delete_requested` so the main
+        window can remove any corresponding box in the viewer.
+        """
+        from PyQt5.QtCore import QEvent
+
+        if obj is self.table and event.type() == QEvent.KeyPress:
+            key = event.key()
+            if key == Qt.Key_Delete:
+                info = self.get_selected_cell_info()
+                if info is not None:
+                    file_path, page_number, column_name = info
+                    # only react for data columns (column_name non-empty)
+                    if column_name:
+                        # clear the cell text; this will trigger cellChanged ->
+                        # model update and emit data_edited automatically
+                        item = self.table.currentItem()
+                        if item is not None:
+                            item.setText("")
+                        # notify any listeners so external components (main
+                        # window) can delete the box
+                        self.cell_delete_requested.emit(file_path, page_number, column_name)
+                        # eat the event so default behaviour (if any) stops
+                        return True
+        return super().eventFilter(obj, event)
+
     def _on_columns_visibility(self) -> None:
         """Show a pop-up menu to toggle column visibility."""
         menu = QMenu(self)
