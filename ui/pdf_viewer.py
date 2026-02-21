@@ -376,10 +376,23 @@ class PDFViewerCanvas(QWidget):
         # Check if clicking on an existing box
         clicked_box = self._find_box_at_point(pos)
         if clicked_box:
-            # Deselect all
-            for b in self._boxes:
-                b.selected = False
-            clicked_box.selected = True
+            # Ctrl+click toggles selection, no move initiated
+            if event.modifiers() & Qt.ControlModifier:
+                clicked_box.selected = not clicked_box.selected
+                # emit selection for the clicked box
+                if clicked_box.selected:
+                    self.box_selected_signal.emit(clicked_box.column_name)
+                self.update()
+                return
+
+            # Without Ctrl, begin move; preserve existing selection when
+            # user clicks one of already-selected boxes (to move group).
+            if not clicked_box.selected:
+                # clear others if the clicked one wasn't already selected
+                for b in self._boxes:
+                    b.selected = False
+                clicked_box.selected = True
+            # mark all currently selected boxes for potential grouped move
             self._moving = True
             self._move_box = clicked_box
             self._move_start = pos
@@ -419,12 +432,13 @@ class PDFViewerCanvas(QWidget):
             if iw > 0 and ih > 0:
                 delta_x = (pos.x() - self._move_start.x()) / iw
                 delta_y = (pos.y() - self._move_start.y()) / ih
-                
-                new_x = max(0, min(1 - self._move_box.rel_w, self._move_box.rel_x + delta_x))
-                new_y = max(0, min(1 - self._move_box.rel_h, self._move_box.rel_y + delta_y))
-                
-                self._move_box.rel_x = new_x
-                self._move_box.rel_y = new_y
+                # shift every selected box while enforcing bounds
+                for box in self._boxes:
+                    if box.selected:
+                        new_x = max(0, min(1 - box.rel_w, box.rel_x + delta_x))
+                        new_y = max(0, min(1 - box.rel_h, box.rel_y + delta_y))
+                        box.rel_x = new_x
+                        box.rel_y = new_y
                 self._move_start = pos
                 self.update()
             return
@@ -564,12 +578,17 @@ class PDFViewerCanvas(QWidget):
     def keyPressEvent(self, event: QKeyEvent):
         """Handle Delete key to delete selected box and Arrow keys to move it."""
         if event.key() == Qt.Key_Delete:
-            for box in self._boxes:
+            # delete all selected boxes (not just first)
+            removed = []
+            for box in list(self._boxes):
                 if box.selected:
-                    self.box_deleted.emit(box.column_name)
+                    removed.append(box.column_name)
                     self._boxes.remove(box)
-                    self.update()
-                    break
+            for col in removed:
+                self.box_deleted.emit(col)
+            if removed:
+                self.update()
+            return
         elif event.key() in (Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right):
             for box in self._boxes:
                 if box.selected:
@@ -607,13 +626,16 @@ class PDFViewerCanvas(QWidget):
         super().keyReleaseEvent(event)
 
     def delete_selected_box(self) -> None:
-        """Remove the currently selected box and emit deletion signal."""
+        """Remove all selected boxes and emit deletion signals individually."""
+        removed = []
         for box in list(self._boxes):
             if box.selected:
-                self.box_deleted.emit(box.column_name)
+                removed.append(box.column_name)
                 self._boxes.remove(box)
-                self.update()
-                break
+        for col in removed:
+            self.box_deleted.emit(col)
+        if removed:
+            self.update()
 
 
 class PDFViewer(QWidget):

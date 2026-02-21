@@ -27,7 +27,7 @@ if app is None:
 from models.data_models import ProjectData, PDFFileInfo, PageData, BoxInfo
 from ui.pdf_tree_view import PDFTreeView
 from ui.data_table import DataTable
-from ui.pdf_viewer import PDFViewer
+from ui.pdf_viewer import PDFViewer, DrawingBox
 
 
 @pytest.fixture
@@ -382,6 +382,81 @@ class TestPDFViewer:
         assert deleted == ["Title"]
         assert viewer.get_boxes() == []
 
+    def test_ctrl_click_multi_select_and_group_move(self):
+        """Ctrl+click toggles selection; dragging moves all selected boxes."""
+        viewer = PDFViewer()
+        # prepare pixmap so coords are non-zero
+        from PyQt5.QtGui import QPixmap, QColor, QMouseEvent
+        pix = QPixmap(200, 200); pix.fill(QColor('white'))
+        viewer.canvas._pixmap = pix
+        viewer.canvas._update_size()
+        # create two boxes
+        b1 = DrawingBox("A", 0.1, 0.1, 0.2, 0.2)
+        b2 = DrawingBox("B", 0.5, 0.5, 0.2, 0.2)
+        viewer.canvas._boxes = [b1, b2]
+        # ctrl-click b1
+        ox, oy, iw, ih = viewer.canvas._get_image_display_params()
+        pos1 = b1.get_display_rect(ox, oy, iw, ih).center()
+        ev1 = QMouseEvent(QMouseEvent.MouseButtonPress, pos1, Qt.LeftButton,
+                          Qt.LeftButton, Qt.ControlModifier)
+        viewer.canvas.mousePressEvent(ev1)
+        assert b1.selected and not b2.selected
+        # ctrl-click b2 toggles it on
+        pos2 = b2.get_display_rect(ox, oy, iw, ih).center()
+        ev2 = QMouseEvent(QMouseEvent.MouseButtonPress, pos2, Qt.LeftButton,
+                          Qt.LeftButton, Qt.ControlModifier)
+        viewer.canvas.mousePressEvent(ev2)
+        assert b1.selected and b2.selected
+        # now click non-ctrl on b1 to begin group move
+        ev3 = QMouseEvent(QMouseEvent.MouseButtonPress, pos1, Qt.LeftButton,
+                          Qt.LeftButton, Qt.NoModifier)
+        viewer.canvas.mousePressEvent(ev3)
+        assert viewer.canvas._moving
+        # save originals and simulate small move
+        start = pos1
+        newpos = QPointF(start.x() + 10, start.y() + 5)
+        mv = QMouseEvent(QMouseEvent.MouseMove, newpos, Qt.NoButton, Qt.LeftButton, Qt.NoModifier)
+        viewer.canvas.mouseMoveEvent(mv)
+        # both boxes should have moved by same delta
+        assert abs(b1.rel_x - (0.1 + 10/iw)) < 1e-6
+        assert abs(b2.rel_x - (0.5 + 10/iw)) < 1e-6
+
+    def test_multi_delete_using_toolbar(self):
+        """Selecting multiple boxes and clicking clear removes them all."""
+        viewer = PDFViewer()
+        from PyQt5.QtGui import QPixmap, QColor, QMouseEvent
+        pix = QPixmap(200, 200); pix.fill(QColor('white'))
+        viewer.canvas._pixmap = pix
+        viewer.canvas._update_size()
+        b1 = DrawingBox("A", 0.1, 0.1, 0.2, 0.2)
+        b2 = DrawingBox("B", 0.5, 0.5, 0.2, 0.2)
+        viewer.canvas._boxes = [b1, b2]
+        # select both via manual toggling
+        b1.selected = True; b2.selected = True
+        deleted = []
+        viewer.box_deleted.connect(lambda col: deleted.append(col))
+        viewer.btn_clear_box.click()
+        assert set(deleted) == {"A", "B"}
+        assert viewer.canvas._boxes == []
+
+    def test_delete_key_removes_all_selected(self):
+        """Pressing Delete when multiple boxes selected deletes them all."""
+        viewer = PDFViewer()
+        from PyQt5.QtGui import QPixmap, QColor, QKeyEvent
+        pix = QPixmap(200, 200); pix.fill(QColor('white'))
+        viewer.canvas._pixmap = pix
+        viewer.canvas._update_size()
+        b1 = DrawingBox("A", 0.1, 0.1, 0.2, 0.2)
+        b2 = DrawingBox("B", 0.5, 0.5, 0.2, 0.2)
+        viewer.canvas._boxes = [b1, b2]
+        b1.selected = True; b2.selected = True
+        deleted = []
+        viewer.box_deleted.connect(lambda col: deleted.append(col))
+        ev = QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Delete, Qt.NoModifier)
+        viewer.canvas.keyPressEvent(ev)
+        assert set(deleted) == {"A", "B"}
+        assert viewer.canvas._boxes == []
+
     def test_center_on_box_scrolls_to_box(self):
         """Centering on an existing box should move scrollbars so the box is visible."""
         viewer = PDFViewer()
@@ -503,7 +578,9 @@ class TestPDFViewer:
         from PyQt5.QtWidgets import QToolBar
         toolbar = win.findChild(QToolBar)
         assert toolbar is not None
-        assert cb.parent() is toolbar
+        # ensure the checkbox belongs to the same window and not the viewer
+        assert cb.window() is win
+        assert not isinstance(cb.parent(), PDFViewer)
         # still only one toolbar present
         toolbars = win.findChildren(QToolBar)
         assert len(toolbars) == 1

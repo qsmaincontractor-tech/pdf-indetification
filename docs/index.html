@@ -564,7 +564,7 @@
     and user-defined data columns. Click a data cell to select it for box drawing — if a drawn box exists for that cell the PDF viewer will be focused and centred on that box so it is immediately visible. Double-click to edit values manually.</p>
     
     <h3>3rd Column: PDF Page Viewer</h3>
-    <p>Renders the selected PDF page with zoom, pan, and interactive box drawing. The zoom toolbar contains a <strong>Centre</strong> button that resets pan, a <strong>Clear Box</strong> control for deleting the selected box, and a <strong>Single Page Mode</strong> checkbox on its left edge. Clicking a data cell in the table will highlight the corresponding box and centre the viewer on it (when present). Boxes are color-coded and labeled with their column names.</p>
+    <p>Renders the selected PDF page with zoom, pan, and interactive box drawing. The zoom toolbar contains a <strong>Centre</strong> button that resets pan, a <strong>Clear Box</strong> control for deleting the selected box, and a <strong>Single Page Mode</strong> checkbox on its left edge. Clicking a data cell in the table will highlight the corresponding box and centre the viewer on it (when present). Boxes are color-coded and labeled with their column names. <strong>Hold <kbd>Ctrl</kbd> and click boxes to select multiple regions, then drag any one of them to move the group or press Delete/Clear Box to remove all selected.</strong></p>
 </section>
 
 <!-- ==================== IMPORTING PDFS ==================== -->
@@ -598,9 +598,9 @@
     
     <h3>Editing a Box</h3>
     <ul>
-        <li><strong>Move:</strong> Click and drag inside the box</li>
+        <li><strong>Move:</strong> Click and drag inside the box.  When multiple boxes are selected (<kbd>Ctrl</kbd>+click), dragging moves them as a group.</li>
         <li><strong>Resize:</strong> Click the box, then drag any resize handle (corners/edges)</li>
-        <li><strong>Delete:</strong> Select the box and press <kbd>Delete</kbd></li>
+        <li><strong>Delete:</strong> Select the box and press <kbd>Delete</kbd> or click the <strong>Clear Box</strong> button.  Multiple selected boxes will all be removed.</li>
     </ul>
     
     <h3>Applying Boxes to Multiple Pages</h3>
