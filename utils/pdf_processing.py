@@ -328,6 +328,41 @@ def check_page_has_text(file_path: str, page_number: int) -> bool:
         return False
 
 
+# ---------------------------------------------------------------------------
+# Multiprocessing helpers — must be top-level so they can be pickled/imported
+# by subprocess workers spawned by ProcessPoolExecutor.
+# ---------------------------------------------------------------------------
+
+def _init_subprocess(project_root: str) -> None:
+    """Initializer for ProcessPoolExecutor workers.
+
+    Adds the project root to sys.path so that all project imports (models,
+    utils, …) work correctly inside spawned worker processes.
+    """
+    import sys
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+
+
+def _extract_box_task(args: tuple) -> tuple:
+    """Picklable worker that extracts text for one box.
+
+    Args:
+        args: (file_path, page_number, column_name, rel_x, rel_y, rel_w, rel_h)
+
+    Returns:
+        (file_path, page_number, column_name, extracted_text)
+    """
+    file_path, page_number, column_name, rel_x, rel_y, rel_w, rel_h = args
+    try:
+        text = extract_text_from_relative_region(
+            file_path, page_number, rel_x, rel_y, rel_w, rel_h
+        )
+    except Exception:
+        text = ""
+    return (file_path, page_number, column_name, text)
+
+
 def is_ocr_available() -> bool:
     """Return True if an OCR engine is available for fallback.
 

@@ -17,6 +17,8 @@ Implements all toolbar actions:
 import os
 import sys
 import time
+import threading
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from PyQt5.QtWidgets import (
     QMainWindow,
@@ -29,12 +31,18 @@ from PyQt5.QtWidgets import (
     QStatusBar,
     QProgressBar,
     QLabel,
+    QPushButton,
     QFileDialog,
     QMessageBox,
     QApplication,
+    QCheckBox,
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize
 from PyQt5.QtGui import QIcon, QFont
+
+# Absolute path to the project root (parent of this ui/ package).
+# Passed to subprocess workers so they can import project modules.
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 from models.data_models import (
     ProjectData,
@@ -98,41 +106,94 @@ class ImportWorker(QThread):
 class RecognizeWorker(QThread):
     """
     Worker thread for text recognition on selected pages.
-    
+
+    Uses a ``ProcessPoolExecutor`` to run box-level extraction jobs in
+    parallel across multiple CPU cores while reporting live progress and
+    supporting mid-run cancellation.
+
     Signals:
-        progress(int, int): (current, total) progress.
+        progress(int, int): (completed_tasks, total_tasks) progress update.
         text_extracted(str, int, str, str): (file_path, page_num, column_name, text).
-        finished_recognize(): Emitted when done.
-        error(str): Emitted on error.
+        finished_recognize(): Emitted when done (including after cancel).
+        error(str): Emitted on per-task errors.
     """
     progress = pyqtSignal(int, int)
     text_extracted = pyqtSignal(str, int, str, str)
     finished_recognize = pyqtSignal()
     error = pyqtSignal(str)
-    
-    def __init__(self, pages_and_boxes, parent=None):
+
+    def __init__(self, pages_and_boxes, project_root: str, parent=None):
         """
         Args:
             pages_and_boxes: List of (file_path, page_number, boxes_list) tuples.
+            project_root: Absolute path to the project root directory so that
+                subprocess workers can add it to sys.path.
         """
         super().__init__(parent)
         self.pages_and_boxes = pages_and_boxes
-    
+        self.project_root = project_root
+        self._cancel_event = threading.Event()
+
+    def cancel(self) -> None:
+        """Request cancellation.  Already-running subprocesses finish normally;
+        queued tasks are discarded and no further signals (except
+        finished_recognize) will be emitted."""
+        self._cancel_event.set()
+
     def run(self):
-        total = len(self.pages_and_boxes)
-        for i, (file_path, page_num, boxes) in enumerate(self.pages_and_boxes):
+        from utils.pdf_processing import _extract_box_task, _init_subprocess
+
+        # Flatten (file_path, page_num, boxes) into individual box tasks.
+        tasks: list = []
+        for file_path, page_num, boxes in self.pages_and_boxes:
             for box in boxes:
-                try:
-                    text = extract_text_from_relative_region(
-                        file_path, page_num,
-                        box.x, box.y, box.width, box.height,
-                    )
-                    self.text_extracted.emit(file_path, page_num, box.column_name, text)
-                except Exception as e:
-                    self.error.emit(f"OCR error on {file_path} p{page_num+1}: {e}")
-            
-            self.progress.emit(i + 1, total)
-        
+                tasks.append((
+                    file_path, page_num, box.column_name,
+                    box.x, box.y, box.width, box.height,
+                ))
+
+        total = len(tasks)
+        if total == 0:
+            self.finished_recognize.emit()
+            return
+
+        completed = 0
+        # Limit workers: at most 4 or the number of CPUs (min with task count).
+        max_workers = min(4, total, max(1, (os.cpu_count() or 2)))
+
+        try:
+            with ProcessPoolExecutor(
+                max_workers=max_workers,
+                initializer=_init_subprocess,
+                initargs=(self.project_root,),
+            ) as executor:
+                futures = {
+                    executor.submit(_extract_box_task, task): task
+                    for task in tasks
+                }
+
+                for future in as_completed(futures):
+                    if self._cancel_event.is_set():
+                        # Cancel all still-pending futures and stop collecting.
+                        for f in futures:
+                            f.cancel()
+                        break
+
+                    try:
+                        fp, pn, col, text = future.result()
+                        self.text_extracted.emit(fp, pn, col, text)
+                    except Exception as exc:
+                        task = futures[future]
+                        self.error.emit(
+                            f"Error on {task[0]} p{task[1] + 1}: {exc}"
+                        )
+
+                    completed += 1
+                    self.progress.emit(completed, total)
+
+        except Exception as exc:
+            self.error.emit(f"Multiprocessing error: {exc}")
+
         self.finished_recognize.emit()
 
 
@@ -265,6 +326,17 @@ class MainWindow(QMainWindow):
         self.action_export.setToolTip("Export all data to an Excel file")
         self.action_export.triggered.connect(self._on_export_excel)
         toolbar.addAction(self.action_export)
+
+        toolbar.addSeparator()
+
+        # Single Page Mode toggle
+        self.chk_single_page_mode = QCheckBox("Single Page Mode")
+        self.chk_single_page_mode.setToolTip(
+            "Show only the data for the currently selected page in the table"
+        )
+        self.chk_single_page_mode.setChecked(False)
+        self.chk_single_page_mode.toggled.connect(self._on_single_page_mode_toggled)
+        toolbar.addWidget(self.chk_single_page_mode)
     
     def _setup_statusbar(self):
         """Set up the bottom status bar with labels and progress bar."""
@@ -281,7 +353,14 @@ class MainWindow(QMainWindow):
         self.ocr_label = QLabel("OCR: unknown")
         self.ocr_label.setToolTip("OCR availability")
         self.statusbar.addPermanentWidget(self.ocr_label)
-        
+
+        # Cancel button — visible only while text recognition is running.
+        self.btn_cancel_recognize = QPushButton("Cancel")
+        self.btn_cancel_recognize.setToolTip("Cancel the running text recognition")
+        self.btn_cancel_recognize.setVisible(False)
+        self.btn_cancel_recognize.clicked.connect(self._on_cancel_recognize)
+        self.statusbar.addPermanentWidget(self.btn_cancel_recognize)
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setMaximumWidth(200)
         self.progress_bar.setVisible(False)
@@ -298,6 +377,9 @@ class MainWindow(QMainWindow):
         # Table data edited -> update model
         self.data_table.data_edited.connect(self._on_data_edited)
         
+        # Table SPM navigation -> update viewer and tree selection
+        self.data_table.page_navigated.connect(self._on_spm_page_navigated)
+
         # Viewer box drawn -> update model and table
         self.pdf_viewer.box_drawn.connect(self._on_box_drawn)
         self.pdf_viewer.box_changed.connect(self._on_box_changed)
@@ -374,7 +456,8 @@ class MainWindow(QMainWindow):
             if page:
                 self.pdf_viewer.set_boxes(page.boxes)
         
-        # Highlight corresponding row in table
+        # Highlight corresponding row in table (and update SPM navigation)
+        self.data_table.navigate_to_page(file_path, page_number)
         self.data_table.highlight_row_for_page(file_path, page_number)
         
         # Save selection state
@@ -488,7 +571,23 @@ class MainWindow(QMainWindow):
     def _on_box_selected_in_viewer(self, column_name: str) -> None:
         """Handle box selection in the viewer - highlight in table."""
         self.pdf_viewer.set_active_column(column_name)
-    
+
+    # ===== Single Page Mode =====
+
+    def _on_single_page_mode_toggled(self, enabled: bool) -> None:
+        """Enable or disable Single Page Mode in the data table."""
+        self.data_table.set_single_page_mode(enabled)
+        # If a page is already selected, make sure the SPM view is in sync
+        if enabled and self._current_file_path and self._current_page_num >= 0:
+            self.data_table.navigate_to_page(self._current_file_path, self._current_page_num)
+
+    def _on_spm_page_navigated(self, file_path: str, page_number: int) -> None:
+        """Handle SPM Previous / Next button navigation from the data table."""
+        # Update tree selection so the highlight stays in sync
+        self.pdf_tree.select_page(file_path, page_number)
+        # Load the page in the viewer (does not re-emit page_selected)
+        self._on_page_selected(file_path, page_number)
+
     # ===== Toolbar Actions =====
     
     def _on_import(self) -> None:
@@ -728,8 +827,12 @@ class MainWindow(QMainWindow):
         
         self._update_status("Recognizing text...")
         self.action_recognize.setEnabled(False)
-        
-        self._recognize_worker = RecognizeWorker(pages_and_boxes)
+        self.btn_cancel_recognize.setVisible(True)
+        self.btn_cancel_recognize.setEnabled(True)
+
+        self._recognize_worker = RecognizeWorker(
+            pages_and_boxes, project_root=_PROJECT_ROOT
+        )
         self._recognize_worker.progress.connect(self._show_progress)
         self._recognize_worker.text_extracted.connect(self._on_text_extracted)
         self._recognize_worker.error.connect(lambda msg: self._update_status(msg))
@@ -747,11 +850,25 @@ class MainWindow(QMainWindow):
                 if box:
                     box.extracted_text = text
     
+    def _on_cancel_recognize(self) -> None:
+        """Handle the Cancel button click during text recognition."""
+        if hasattr(self, "_recognize_worker") and self._recognize_worker.isRunning():
+            self._recognize_worker.cancel()
+            self.btn_cancel_recognize.setEnabled(False)
+            self._update_status("Cancelling text recognition…")
+
     def _on_recognize_finished(self) -> None:
-        """Handle text recognition completion."""
+        """Handle text recognition completion (normal or cancelled)."""
         self.data_table.refresh()
         self.action_recognize.setEnabled(True)
-        self._update_status("Text recognition complete")
+        self.btn_cancel_recognize.setVisible(False)
+        cancelled = (
+            hasattr(self, "_recognize_worker")
+            and self._recognize_worker._cancel_event.is_set()
+        )
+        self._update_status(
+            "Text recognition cancelled" if cancelled else "Text recognition complete"
+        )
         # L2: Refresh the viewer boxes for the currently displayed page so that
         # box labels stay in sync with any newly extracted text.
         if self._current_file_path and self._current_page_num >= 0:

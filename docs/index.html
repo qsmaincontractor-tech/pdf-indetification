@@ -421,6 +421,7 @@
     <a href="#managing-columns">📊 Managing Columns</a>
     <a href="#save-load">💾 Save &amp; Load</a>
     <a href="#export-excel">📈 Export to Excel</a>
+    <a href="#single-page-mode">📄 Single Page Mode</a>
     <a href="#keyboard-shortcuts">⌨️ Shortcuts</a>
     
     <div class="section-header">Developer</div>
@@ -625,6 +626,9 @@
         <li>All drawn boxes on selected pages are processed</li>
         <li>Progress is shown in the status bar</li>
     </ol>
+    <p>The extraction tasks run in parallel using multiple CPU cores for speed.
+    A cancel button appears next to the progress bar; clicking it will abort the
+    operation as soon as possible while allowing already-started tasks to finish.</p>
     
     <h3>Manual Editing</h3>
     <p>Double-click any cell in the data table to manually edit the extracted value.
@@ -698,6 +702,114 @@
         <tr><td>Page Number</td><td>1-based page number</td></tr>
         <tr><td><em>[Custom Columns]</em></td><td>User-defined extracted data columns</td></tr>
     </table>
+</section>
+
+<!-- ==================== SINGLE PAGE MODE ==================== -->
+<section id="single-page-mode">
+    <h2>Single Page Mode</h2>
+
+    <h3>Introduction</h3>
+    <p>When a project contains many PDF pages, the <strong>Extracted Data</strong> table can become very long
+    and difficult to navigate. <em>Single Page Mode</em> addresses this by showing <strong>only the row for
+    the currently selected page</strong>, together with a compact navigation bar that lets you step through
+    every page one at a time without losing any data.</p>
+
+    <div class="info-box tip">
+        <div>
+            <span class="title">✅ Tip</span>
+            Switching pages in Single Page Mode never discards edits — all cell changes are written
+            directly to the in-memory project data, just as in normal mode.
+        </div>
+    </div>
+
+    <h3>How to Enable</h3>
+    <ol class="steps">
+        <li>
+            <strong>Locate the toggle in the toolbar</strong>
+            <p>A <strong>"Single Page Mode"</strong> checkbox is placed at the right end of the main toolbar,
+            after the <em>Export Excel</em> button.</p>
+        </li>
+        <li>
+            <strong>Check the checkbox</strong>
+            <p>The Extracted Data table immediately collapses to show only the currently selected page.
+            A blue navigation bar appears above the table.</p>
+        </li>
+        <li>
+            <strong>Navigate between pages</strong>
+            <p>Use the <strong>← Previous</strong> and <strong>Next →</strong> buttons in the navigation
+            bar to move backward or forward through all pages in the project. The page indicator label
+            shows the current file name, 1-based page number, and your overall position
+            (e.g., <code>report.pdf  |  Page 3  (5 / 42)</code>).</p>
+        </li>
+        <li>
+            <strong>Uncheck the checkbox to return to normal mode</strong>
+            <p>The full table is restored and sorting / interactive resize are re-enabled.</p>
+        </li>
+    </ol>
+
+    <h3>User Interface</h3>
+    <p>When Single Page Mode is active the table area looks like this:</p>
+    <pre><code>┌──────────────────────────────────────────────────────────────────┐
+│ Extracted Data                                                     │
+├──────────────────────────────────────────────────────────────────┤
+│  report.pdf  |  Page 3  (3 / 42)    [← Previous]  [Next →]      │
+├──────────────────────────────────────────────────────────────────┤
+│ Attribute │ Extracted Data                                       │
+│─────────────────────────────────────────────────────────────────│
+│ Column A  │  value                                               │
+│ Column B  │  value                                               │
+│ ...       │  ...                                                 │
+├──────────────────────────────────────────────────────────────────┤
+│  [+ Add Column]  [- Remove Column]  [Show/Hide Columns]          │
+└──────────────────────────────────────────────────────────────────┘</code></pre>
+
+    <ul>
+        <li><strong>Navigation bar</strong> — shows file name, current page number, and overall index
+            (e.g., <em>3 / 42</em>). The <strong>← Previous</strong> button is disabled on the first page;
+            <strong>Next →</strong> is disabled on the last page.</li>
+        <li><strong>Vertical table</strong> — the table is transposed to show <strong>Attribute</strong> (column names) and <strong>Extracted Data</strong> (values) for the active page. If an attribute
+            has no data for that page the cell is empty and can be edited directly.</li>
+        <li><strong>Add / Remove Column buttons</strong> — behave identically to normal mode. A newly
+            added column instantly appears as a new row for the current page (empty) and for every other page.</li>
+        <li><strong>Row highlight</strong> — the selected row (attribute) is highlighted with the standard selection
+            colour so the active field is always easy to identify.</li>
+    </ul>
+
+    <h3>Behaviour</h3>
+    <table>
+        <tr><th>Scenario</th><th>Behaviour</th></tr>
+        <tr>
+            <td>Selecting a page in the tree while SPM is active</td>
+            <td>The navigation bar jumps to that page; the table updates immediately to show the data for that page.</td>
+        </tr>
+        <tr>
+            <td>Clicking ← Previous / Next →</td>
+            <td>The PDF Viewer and the tree selection both update to match the new page.</td>
+        </tr>
+        <tr>
+            <td>Editing a cell in SPM</td>
+            <td>Data is written to the in-memory model; switching pages does not discard the edit.</td>
+        </tr>
+        <tr>
+            <td>Page with no extracted data</td>
+            <td>All data cells are shown as empty and remain fully editable.</td>
+        </tr>
+        <tr>
+            <td>Sorting / interactive column resize</td>
+            <td>Disabled while SPM is active to prevent accidental reordering. Both are restored when SPM is turned off.</td>
+        </tr>
+        <tr>
+            <td>Clicking a row cell</td>
+            <td>Row is highlighted and the matching box in the PDF Viewer gains focus, same as normal
+                mode.</td>
+        </tr>
+    </table>
+
+    <h3>Conclusion</h3>
+    <p>Single Page Mode is ideal for projects with dozens or hundreds of pages where scrolling through
+    the full table is impractical. Because all edits are persisted concurrently to the shared
+    <code>ProjectData</code> object, you can freely navigate between pages, fill in data one page at a
+    time, and then export or save the complete dataset without any data loss.</p>
 </section>
 
 <!-- ==================== KEYBOARD SHORTCUTS ==================== -->

@@ -29,6 +29,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QAbstractItemView,
     QMessageBox,
+    QFrame,
 )
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QFont, QColor, QBrush
@@ -79,6 +80,7 @@ class DataTable(QWidget):
     
     cell_selected = pyqtSignal(str, int, str)
     data_edited = pyqtSignal(str, int, str, str)
+    page_navigated = pyqtSignal(str, int)  # Emitted when SPM prev/next navigation changes page
     
     # Fixed columns
     COL_FILE_NAME = 0
@@ -91,6 +93,12 @@ class DataTable(QWidget):
         self._project_data: Optional[ProjectData] = None
         self._editing = False
         self._highlighted_row = -1
+
+        # Single Page Mode state
+        self._single_page_mode: bool = False
+        self._spm_pages_flat: List[Tuple[str, int]] = []  # (file_path, page_number)
+        self._spm_index: int = -1  # index into _spm_pages_flat
+
         self._setup_ui()
     
     def _setup_ui(self):
@@ -103,7 +111,43 @@ class DataTable(QWidget):
         header.setFont(QFont("Segoe UI", 10, QFont.Bold))
         header.setStyleSheet("padding: 6px; background-color: #f0f0f0; border-bottom: 1px solid #ccc;")
         layout.addWidget(header)
-        
+
+        # Single Page Mode navigation bar (hidden by default)
+        self.spm_nav_bar = QWidget()
+        self.spm_nav_bar.setStyleSheet(
+            "background-color: #e8f0fe; border-bottom: 1px solid #aac4f0;"
+        )
+        spm_nav_layout = QHBoxLayout(self.spm_nav_bar)
+        spm_nav_layout.setContentsMargins(6, 4, 6, 4)
+        spm_nav_layout.setSpacing(6)
+
+        self.spm_page_label = QLabel("No page selected")
+        self.spm_page_label.setFont(QFont("Segoe UI", 9))
+        spm_nav_layout.addWidget(self.spm_page_label, 1)
+
+        self.btn_prev_page = QPushButton("← Previous")
+        self.btn_prev_page.setToolTip("Navigate to the previous page")
+        self.btn_prev_page.setEnabled(False)
+        self.btn_prev_page.clicked.connect(self._on_prev_page)
+        spm_nav_layout.addWidget(self.btn_prev_page)
+
+        self.btn_next_page = QPushButton("Next →")
+        self.btn_next_page.setToolTip("Navigate to the next page")
+        self.btn_next_page.setEnabled(False)
+        self.btn_next_page.clicked.connect(self._on_next_page)
+        spm_nav_layout.addWidget(self.btn_next_page)
+
+        self.spm_nav_bar.setVisible(False)
+        layout.addWidget(self.spm_nav_bar)
+
+        # Horizontal separator below nav bar
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setFrameShadow(QFrame.Sunken)
+        sep.setVisible(False)
+        self._spm_separator = sep
+        layout.addWidget(sep)
+
         # Table
         self.table = QTableWidget()
         self.table.setSelectionBehavior(QAbstractItemView.SelectItems)
@@ -153,7 +197,18 @@ class DataTable(QWidget):
         """Rebuild the table from the current project data."""
         if self._project_data is None:
             return
-        
+
+        # ---- Rebuild the flat pages list used by Single Page Mode navigation ----
+        self._spm_pages_flat = [
+            (pdf_file.file_path, page.page_number)
+            for pdf_file in self._project_data.pdf_files
+            for page in pdf_file.pages
+        ]
+
+        # Clamp / invalidate the SPM index if the project data changed
+        if self._spm_index >= len(self._spm_pages_flat):
+            self._spm_index = len(self._spm_pages_flat) - 1
+
         # Temporarily disable sorting to avoid row reordering mid-update
         _sorting_was_enabled = self.table.isSortingEnabled()
         self.table.setSortingEnabled(False)
@@ -163,58 +218,109 @@ class DataTable(QWidget):
         # Build column headers
         column_names = self._project_data.get_column_names()
         headers = ["File Name", "File Path", "Page #"] + column_names
-        
-        # Count total rows (one per page)
-        total_rows = sum(len(f.pages) for f in self._project_data.pdf_files)
-        
-        self.table.setColumnCount(len(headers))
-        self.table.setRowCount(total_rows)
-        self.table.setHorizontalHeaderLabels(headers)
-        
-        # Hide File Path column by default
-        self.table.setColumnHidden(self.COL_FILE_PATH, True)
-        
-        # Apply column visibility settings
-        for idx, col in enumerate(self._project_data.columns):
-            col_index = self.FIXED_COL_COUNT + idx
-            if col_index < self.table.columnCount():
-                self.table.setColumnHidden(col_index, not col.visible)
-        
-        # Populate rows
-        row = 0
-        for pdf_file in self._project_data.pdf_files:
-            for page in pdf_file.pages:
-                # File Name (read-only)
-                item_fn = QTableWidgetItem(pdf_file.file_name)
-                item_fn.setFlags(item_fn.flags() & ~Qt.ItemIsEditable)
-                item_fn.setData(Qt.UserRole, pdf_file.file_path)
-                item_fn.setData(Qt.UserRole + 1, page.page_number)
-                self.table.setItem(row, self.COL_FILE_NAME, item_fn)
+
+        # Decide which (file, page) pairs to render
+        if self._single_page_mode:
+            if self._spm_index >= 0:
+                spm_file, spm_page = self._spm_pages_flat[self._spm_index]
+                pairs_to_render = [
+                    (pdf_file, page)
+                    for pdf_file in self._project_data.pdf_files
+                    for page in pdf_file.pages
+                    if pdf_file.file_path == spm_file and page.page_number == spm_page
+                ]
+            else:
+                # SPM active but no page selected yet — show empty table
+                pairs_to_render = []
                 
-                # File Path (read-only)
-                item_fp = QTableWidgetItem(pdf_file.file_path)
-                item_fp.setFlags(item_fp.flags() & ~Qt.ItemIsEditable)
-                item_fp.setData(Qt.UserRole, pdf_file.file_path)
-                item_fp.setData(Qt.UserRole + 1, page.page_number)
-                self.table.setItem(row, self.COL_FILE_PATH, item_fp)
+            # In Single Page Mode, we show Attribute | Extracted Data
+            headers = ["Attribute", "Extracted Data"]
+            self.table.setColumnCount(len(headers))
+            self.table.setHorizontalHeaderLabels(headers)
+            
+            if not pairs_to_render:
+                self.table.setRowCount(0)
+            else:
+                pdf_file, page = pairs_to_render[0]
                 
-                # Page Number (read-only) — use SortableTableWidgetItem so sorting is numeric
-                item_pn = SortableTableWidgetItem(str(page.page_number + 1), sort_key=(page.page_number + 1))
-                item_pn.setFlags(item_pn.flags() & ~Qt.ItemIsEditable)
-                item_pn.setData(Qt.UserRole, pdf_file.file_path)
-                item_pn.setData(Qt.UserRole + 1, page.page_number)
-                self.table.setItem(row, self.COL_PAGE_NUM, item_pn)
+                # Filter visible columns
+                visible_columns = [col for col in self._project_data.columns if col.visible]
+                self.table.setRowCount(len(visible_columns))
                 
-                # Extracted data columns (editable)
-                for col_idx, col_name in enumerate(column_names):
-                    value = page.extracted_data.get(col_name, "")
-                    item = QTableWidgetItem(str(value))
-                    item.setData(Qt.UserRole, pdf_file.file_path)
-                    item.setData(Qt.UserRole + 1, page.page_number)
-                    item.setData(Qt.UserRole + 2, col_name)
-                    self.table.setItem(row, self.FIXED_COL_COUNT + col_idx, item)
+                for row, col in enumerate(visible_columns):
+                    # Attribute (read-only)
+                    item_attr = QTableWidgetItem(col.name)
+                    item_attr.setFlags(item_attr.flags() & ~Qt.ItemIsEditable)
+                    item_attr.setData(Qt.UserRole, pdf_file.file_path)
+                    item_attr.setData(Qt.UserRole + 1, page.page_number)
+                    item_attr.setData(Qt.UserRole + 2, col.name)
+                    self.table.setItem(row, 0, item_attr)
+                    
+                    # Extracted Data (editable)
+                    value = page.extracted_data.get(col.name, "")
+                    item_val = QTableWidgetItem(str(value))
+                    item_val.setData(Qt.UserRole, pdf_file.file_path)
+                    item_val.setData(Qt.UserRole + 1, page.page_number)
+                    item_val.setData(Qt.UserRole + 2, col.name)
+                    self.table.setItem(row, 1, item_val)
+                    
+            # Show all columns in SPM (since there are only 2)
+            for i in range(self.table.columnCount()):
+                self.table.setColumnHidden(i, False)
                 
-                row += 1
+        else:
+            pairs_to_render = [
+                (pdf_file, page)
+                for pdf_file in self._project_data.pdf_files
+                for page in pdf_file.pages
+            ]
+
+            total_rows = len(pairs_to_render)
+            
+            self.table.setColumnCount(len(headers))
+            self.table.setRowCount(total_rows)
+            self.table.setHorizontalHeaderLabels(headers)
+            
+            # Hide File Path column by default
+            self.table.setColumnHidden(self.COL_FILE_PATH, True)
+            
+            # Apply column visibility settings
+            for idx, col in enumerate(self._project_data.columns):
+                col_index = self.FIXED_COL_COUNT + idx
+                if col_index < self.table.columnCount():
+                    self.table.setColumnHidden(col_index, not col.visible)
+            
+            # Populate rows
+            for row, (pdf_file, page) in enumerate(pairs_to_render):
+                    # File Name (read-only)
+                    item_fn = QTableWidgetItem(pdf_file.file_name)
+                    item_fn.setFlags(item_fn.flags() & ~Qt.ItemIsEditable)
+                    item_fn.setData(Qt.UserRole, pdf_file.file_path)
+                    item_fn.setData(Qt.UserRole + 1, page.page_number)
+                    self.table.setItem(row, self.COL_FILE_NAME, item_fn)
+                    
+                    # File Path (read-only)
+                    item_fp = QTableWidgetItem(pdf_file.file_path)
+                    item_fp.setFlags(item_fp.flags() & ~Qt.ItemIsEditable)
+                    item_fp.setData(Qt.UserRole, pdf_file.file_path)
+                    item_fp.setData(Qt.UserRole + 1, page.page_number)
+                    self.table.setItem(row, self.COL_FILE_PATH, item_fp)
+                    
+                    # Page Number (read-only) — use SortableTableWidgetItem so sorting is numeric
+                    item_pn = SortableTableWidgetItem(str(page.page_number + 1), sort_key=(page.page_number + 1))
+                    item_pn.setFlags(item_pn.flags() & ~Qt.ItemIsEditable)
+                    item_pn.setData(Qt.UserRole, pdf_file.file_path)
+                    item_pn.setData(Qt.UserRole + 1, page.page_number)
+                    self.table.setItem(row, self.COL_PAGE_NUM, item_pn)
+                    
+                    # Extracted data columns (editable)
+                    for col_idx, col_name in enumerate(column_names):
+                        value = page.extracted_data.get(col_name, "")
+                        item = QTableWidgetItem(str(value))
+                        item.setData(Qt.UserRole, pdf_file.file_path)
+                        item.setData(Qt.UserRole + 1, page.page_number)
+                        item.setData(Qt.UserRole + 2, col_name)
+                        self.table.setItem(row, self.FIXED_COL_COUNT + col_idx, item)
         
         # Resize columns to content
         self.table.resizeColumnsToContents()
@@ -223,6 +329,9 @@ class DataTable(QWidget):
         # Restore sorting state
         self.table.setSortingEnabled(_sorting_was_enabled)
         
+        # Update SPM navigation bar
+        self._update_spm_nav()
+
         # If project remembers last selection, restore highlight for that page
         try:
             last_file = getattr(self._project_data, "last_selected_file", "")
@@ -240,6 +349,11 @@ class DataTable(QWidget):
             file_path: Path of the PDF file.
             page_number: Zero-based page number.
         """
+        if self._single_page_mode:
+            # In SPM, the whole table is for the selected page, so we don't highlight a specific row
+            # unless we want to highlight the selected column. For now, just return.
+            return
+            
         highlight_color = QBrush(QColor("#D6EAF8"))
         default_color1 = QBrush(QColor("#FFFFFF"))
         default_color2 = QBrush(QColor("#F5F5F5"))
@@ -262,7 +376,110 @@ class DataTable(QWidget):
                 cell = self.table.item(row, col)
                 if cell:
                     cell.setBackground(color)
-    
+
+    # ===== Single Page Mode =====
+
+    def set_single_page_mode(self, enabled: bool) -> None:
+        """
+        Enable or disable Single Page Mode.
+
+        In Single Page Mode only the row for the currently selected page is
+        shown in the table, with Previous / Next navigation buttons to switch
+        between pages.
+
+        Args:
+            enabled: True to enable, False to disable.
+        """
+        self._single_page_mode = enabled
+        self.spm_nav_bar.setVisible(enabled)
+        self._spm_separator.setVisible(enabled)
+
+        # In SPM, sorting / interactive resizing must stay disabled while the
+        # nav bar is active so the user does not accidentally reorder the
+        # single visible row.
+        self.table.setSortingEnabled(not enabled)
+        
+        if enabled:
+            self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        else:
+            self.table.setSelectionBehavior(QAbstractItemView.SelectItems)
+
+        self.refresh()
+
+    @property
+    def single_page_mode(self) -> bool:
+        """Return True if Single Page Mode is currently enabled."""
+        return self._single_page_mode
+
+    def navigate_to_page(self, file_path: str, page_number: int) -> None:
+        """
+        Update the Single Page Mode view to show *file_path / page_number*.
+
+        Called by MainWindow whenever the user selects a page in the tree or
+        clicks a cell in the table.  Has no effect when SPM is disabled.
+
+        Args:
+            file_path: Absolute path of the PDF file.
+            page_number: Zero-based page number.
+        """
+        # Rebuild flat list if it is stale (e.g. called before first refresh)
+        if not self._spm_pages_flat and self._project_data:
+            self._spm_pages_flat = [
+                (f.file_path, p.page_number)
+                for f in self._project_data.pdf_files
+                for p in f.pages
+            ]
+
+        try:
+            self._spm_index = self._spm_pages_flat.index((file_path, page_number))
+        except ValueError:
+            # Page not found in the flat list — keep the current index
+            pass
+
+        if self._single_page_mode:
+            self.refresh()
+
+    def _update_spm_nav(self) -> None:
+        """Refresh the navigation bar label and button states."""
+        total = len(self._spm_pages_flat)
+
+        if not self._single_page_mode or total == 0:
+            self.spm_page_label.setText("No page selected")
+            self.btn_prev_page.setEnabled(False)
+            self.btn_next_page.setEnabled(False)
+            return
+
+        if self._spm_index < 0:
+            self.spm_page_label.setText("No page selected")
+            self.btn_prev_page.setEnabled(False)
+            self.btn_next_page.setEnabled(False)
+            return
+
+        file_path, page_number = self._spm_pages_flat[self._spm_index]
+        import os as _os
+        file_name = _os.path.basename(file_path)
+        self.spm_page_label.setText(
+            f"{file_name}  |  Page {page_number + 1}  ({self._spm_index + 1} / {total})"
+        )
+        self.btn_prev_page.setEnabled(self._spm_index > 0)
+        self.btn_next_page.setEnabled(self._spm_index < total - 1)
+
+    def _on_prev_page(self) -> None:
+        """Navigate to the previous page in Single Page Mode."""
+        if self._spm_index > 0:
+            self._spm_index -= 1
+            file_path, page_number = self._spm_pages_flat[self._spm_index]
+            self.refresh()
+            self.page_navigated.emit(file_path, page_number)
+
+    def _on_next_page(self) -> None:
+        """Navigate to the next page in Single Page Mode."""
+        if self._spm_index < len(self._spm_pages_flat) - 1:
+            self._spm_index += 1
+            file_path, page_number = self._spm_pages_flat[self._spm_index]
+            self.refresh()
+            self.page_navigated.emit(file_path, page_number)
+
     def get_selected_cell_info(self) -> Optional[Tuple[str, int, str]]:
         """
         Get the info of the currently selected cell.
@@ -374,34 +591,35 @@ class DataTable(QWidget):
         """Show a pop-up menu to toggle column visibility."""
         menu = QMenu(self)
         
-        # File Name
-        action_fn = QAction("File Name", menu)
-        action_fn.setCheckable(True)
-        action_fn.setChecked(not self.table.isColumnHidden(self.COL_FILE_NAME))
-        action_fn.triggered.connect(
-            lambda checked: self.table.setColumnHidden(self.COL_FILE_NAME, not checked)
-        )
-        menu.addAction(action_fn)
-        
-        # File Path
-        action_fp = QAction("File Path", menu)
-        action_fp.setCheckable(True)
-        action_fp.setChecked(not self.table.isColumnHidden(self.COL_FILE_PATH))
-        action_fp.triggered.connect(
-            lambda checked: self.table.setColumnHidden(self.COL_FILE_PATH, not checked)
-        )
-        menu.addAction(action_fp)
-        
-        # Page Number
-        action_pn = QAction("Page #", menu)
-        action_pn.setCheckable(True)
-        action_pn.setChecked(not self.table.isColumnHidden(self.COL_PAGE_NUM))
-        action_pn.triggered.connect(
-            lambda checked: self.table.setColumnHidden(self.COL_PAGE_NUM, not checked)
-        )
-        menu.addAction(action_pn)
-        
-        menu.addSeparator()
+        if not self._single_page_mode:
+            # File Name
+            action_fn = QAction("File Name", menu)
+            action_fn.setCheckable(True)
+            action_fn.setChecked(not self.table.isColumnHidden(self.COL_FILE_NAME))
+            action_fn.triggered.connect(
+                lambda checked: self.table.setColumnHidden(self.COL_FILE_NAME, not checked)
+            )
+            menu.addAction(action_fn)
+            
+            # File Path
+            action_fp = QAction("File Path", menu)
+            action_fp.setCheckable(True)
+            action_fp.setChecked(not self.table.isColumnHidden(self.COL_FILE_PATH))
+            action_fp.triggered.connect(
+                lambda checked: self.table.setColumnHidden(self.COL_FILE_PATH, not checked)
+            )
+            menu.addAction(action_fp)
+            
+            # Page Number
+            action_pn = QAction("Page #", menu)
+            action_pn.setCheckable(True)
+            action_pn.setChecked(not self.table.isColumnHidden(self.COL_PAGE_NUM))
+            action_pn.triggered.connect(
+                lambda checked: self.table.setColumnHidden(self.COL_PAGE_NUM, not checked)
+            )
+            menu.addAction(action_pn)
+            
+            menu.addSeparator()
         
         # User-defined columns
         if self._project_data:
@@ -413,7 +631,10 @@ class DataTable(QWidget):
                 
                 def toggle_col(checked, ci=col_index, c=col):
                     c.visible = checked
-                    self.table.setColumnHidden(ci, not checked)
+                    if self._single_page_mode:
+                        self.refresh()
+                    else:
+                        self.table.setColumnHidden(ci, not checked)
                 
                 action.triggered.connect(toggle_col)
                 menu.addAction(action)
@@ -437,20 +658,34 @@ class DataTable(QWidget):
         self.table.setSortingEnabled(False)
 
         self._editing = True
-        for row in range(self.table.rowCount()):
-            item = self.table.item(row, self.COL_FILE_NAME)
-            if item is None:
-                continue
-            if item.data(Qt.UserRole) == file_path and item.data(Qt.UserRole + 1) == page_number:
-                # Find the column
-                if self._project_data:
-                    col_names = self._project_data.get_column_names()
-                    if column_name in col_names:
-                        col_idx = self.FIXED_COL_COUNT + col_names.index(column_name)
-                        cell = self.table.item(row, col_idx)
-                        if cell:
-                            cell.setText(value)
-                break
+        
+        if self._single_page_mode:
+            # In SPM, rows are columns
+            for row in range(self.table.rowCount()):
+                item = self.table.item(row, 0) # Attribute column
+                if item is None:
+                    continue
+                if item.data(Qt.UserRole) == file_path and item.data(Qt.UserRole + 1) == page_number and item.data(Qt.UserRole + 2) == column_name:
+                    cell = self.table.item(row, 1) # Extracted Data column
+                    if cell:
+                        cell.setText(value)
+                    break
+        else:
+            for row in range(self.table.rowCount()):
+                item = self.table.item(row, self.COL_FILE_NAME)
+                if item is None:
+                    continue
+                if item.data(Qt.UserRole) == file_path and item.data(Qt.UserRole + 1) == page_number:
+                    # Find the column
+                    if self._project_data:
+                        col_names = self._project_data.get_column_names()
+                        if column_name in col_names:
+                            col_idx = self.FIXED_COL_COUNT + col_names.index(column_name)
+                            cell = self.table.item(row, col_idx)
+                            if cell:
+                                cell.setText(value)
+                    break
+                    
         self._editing = False
 
         # Restore sorting and reapply highlight for the updated page so the visual state stays correct

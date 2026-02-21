@@ -558,7 +558,7 @@ class PDFViewerCanvas(QWidget):
             super().wheelEvent(event)
     
     def keyPressEvent(self, event: QKeyEvent):
-        """Handle Delete key to delete selected box."""
+        """Handle Delete key to delete selected box and Arrow keys to move it."""
         if event.key() == Qt.Key_Delete:
             for box in self._boxes:
                 if box.selected:
@@ -566,7 +566,41 @@ class PDFViewerCanvas(QWidget):
                     self._boxes.remove(box)
                     self.update()
                     break
+        elif event.key() in (Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right):
+            for box in self._boxes:
+                if box.selected:
+                    ox, oy, iw, ih = self._get_image_display_params()
+                    if iw > 0 and ih > 0:
+                        # Move by 1 pixel in display coordinates, or 10 pixels if Shift is held
+                        step = 10 if event.modifiers() & Qt.ShiftModifier else 1
+                        delta_x = step / iw
+                        delta_y = step / ih
+                        
+                        if event.key() == Qt.Key_Up:
+                            box.rel_y = max(0.0, box.rel_y - delta_y)
+                        elif event.key() == Qt.Key_Down:
+                            box.rel_y = min(1.0 - box.rel_h, box.rel_y + delta_y)
+                        elif event.key() == Qt.Key_Left:
+                            box.rel_x = max(0.0, box.rel_x - delta_x)
+                        elif event.key() == Qt.Key_Right:
+                            box.rel_x = min(1.0 - box.rel_w, box.rel_x + delta_x)
+                        
+                        self.update()
+                    break
         super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event: QKeyEvent):
+        """Emit box_changed when arrow key is released."""
+        if event.isAutoRepeat():
+            super().keyReleaseEvent(event)
+            return
+            
+        if event.key() in (Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right):
+            for box in self._boxes:
+                if box.selected:
+                    self.box_changed.emit(box.column_name, box.rel_x, box.rel_y, box.rel_w, box.rel_h)
+                    break
+        super().keyReleaseEvent(event)
 
 
 class PDFViewer(QWidget):
