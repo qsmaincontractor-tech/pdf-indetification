@@ -438,6 +438,33 @@ class TestPDFViewer:
         assert deleted == ["Title"]
         assert viewer.get_boxes() == []
 
+    def test_arrow_keys_emit_page_request(self):
+        """Left/right arrows with no boxes selected should emit page_requested."""
+        viewer = PDFViewer()
+        recorded = []
+        viewer.page_requested.connect(lambda d: recorded.append(d))
+        # simulate left arrow
+        ev = QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Left, Qt.NoModifier)
+        viewer.keyPressEvent(ev)
+        assert recorded == [-1]
+        # simulate right arrow
+        ev = QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Right, Qt.NoModifier)
+        viewer.keyPressEvent(ev)
+        assert recorded == [-1, 1]
+
+    def test_arrow_keys_ignored_when_box_selected(self):
+        """If a box is selected, arrow keys move the box, not navigate pages."""
+        viewer = PDFViewer()
+        boxes = [BoxInfo(column_name="Title", x=0.1, y=0.1, width=0.2, height=0.2)]
+        viewer.set_boxes(boxes)
+        # mark the only box as selected
+        viewer.get_boxes()[0].selected = True
+        recorded = []
+        viewer.page_requested.connect(lambda d: recorded.append(d))
+        ev = QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Left, Qt.NoModifier)
+        viewer.keyPressEvent(ev)
+        assert recorded == []
+
     def test_ctrl_click_multi_select_and_group_move(self):
         """Ctrl+click toggles selection; dragging moves all selected boxes."""
         viewer = PDFViewer()
@@ -657,7 +684,8 @@ class TestPDFViewer:
         assert not mw.chk_single_page_mode.isChecked()
 
     def test_apply_template_triggers_extraction(self, tmp_path, project_with_data):
-        """Applying a template should create boxes and auto-extract text."""
+        """Applying a template should create boxes, auto-extract text and
+        kick off recognition immediately."""
         from ui.main_window import MainWindow
         from models.data_models import Template, BoxInfo
 
@@ -676,6 +704,11 @@ class TestPDFViewer:
         mw.pdf_tree.select_page(fp, 0)
         mw._on_page_selected(fp, 0)
 
+        # patch recognizer so we can tell if it is invoked
+        called = []
+        import types
+        mw._on_recognize_text = types.MethodType(lambda self=None: called.append(True), mw)
+
         # apply the template
         mw.combo_template.setCurrentText("T1")
         mw._on_apply_template()
@@ -685,12 +718,89 @@ class TestPDFViewer:
         assert "Col" in page.extracted_data
         assert page.extracted_data["Col"] == mw.data_table.item(0, mw.data_table.FIXED_COL_COUNT).text()
 
+        # ensure recognition was triggered
+        assert called, "Recognition should run after applying template"
+
         # combo should still show the same template name and page selection
         assert mw.combo_template.currentText() == "T1"
         assert mw._current_file_path == fp
         assert mw._current_page_num == 0
         # tree view should continue to report the same selected page
         assert mw.pdf_tree.get_selected_pages() == [(fp, 0)]
+
+    def test_apply_template_skips_source_page(self, project_with_data, monkeypatch):
+        """Templates should not be applied to the page they were created from."""
+        from ui.main_window import MainWindow
+        from models.data_models import Template, BoxInfo
+
+        mw = MainWindow()
+        mw._project_data = project_with_data
+        mw._refresh_all()
+
+        pdf_file = project_with_data.pdf_files[0]
+        fp = pdf_file.file_path
+
+        # add box on page to simulate template source
+        tpl = Template(name="T1", ref_page=os.path.basename(fp) + " - Page 1",
+                       boxes=[BoxInfo(column_name="Col", x=0.1, y=0.1, width=0.1, height=0.1)])
+        mw._project_data.templates.append(tpl)
+        mw._update_template_combo()
+
+        # select the source page
+        mw.pdf_tree.select_page(fp, 0)
+        mw._on_page_selected(fp, 0)
+
+        # patch recognizer to track calls
+        called = []
+        import types
+        mw._on_recognize_text = types.MethodType(lambda self=None: called.append(True), mw)
+
+        mw.combo_template.setCurrentText("T1")
+        mw._on_apply_template()
+
+        # nothing should have changed
+        page = project_with_data.pdf_files[0].get_page(0)
+        assert page.boxes == []
+        assert not called
+
+    def test_viewer_arrow_changes_main_window_page(self, project_with_data):
+        """Pressing arrow in viewer should navigate the main window to next/prev page."""
+
+    def test_table_arrow_keys_change_viewer(self, project_with_data):
+        """Arrow key pressed while focus on fixed column should change the viewer page."""
+        from ui.main_window import MainWindow
+        mw = MainWindow()
+        mw._project_data = project_with_data
+        mw._refresh_all()
+
+        fp = project_with_data.pdf_files[0].file_path
+        mw._current_file_path = fp
+        mw._current_page_num = 0
+
+        # focus file name cell and press right
+        mw.data_table.table.setCurrentCell(0, mw.data_table.COL_FILE_NAME)
+        ev = QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Right, Qt.NoModifier)
+        QApplication.sendEvent(mw.data_table.table, ev)
+        assert mw._current_page_num == 1
+        from ui.main_window import MainWindow
+        mw = MainWindow()
+        mw._project_data = project_with_data
+        mw._refresh_all()
+
+        # initial page
+        fp = project_with_data.pdf_files[0].file_path
+        mw._current_file_path = fp
+        mw._current_page_num = 0
+
+        # simulate right arrow
+        ev = QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Right, Qt.NoModifier)
+        mw.pdf_viewer.keyPressEvent(ev)
+        assert mw._current_page_num == 1
+
+        # now left arrow moves back
+        ev = QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Left, Qt.NoModifier)
+        mw.pdf_viewer.keyPressEvent(ev)
+        assert mw._current_page_num == 0
 
     def test_template_combobox_persists_after_refresh(self, project_with_data):
         """The dropdown should keep the last-chosen template when UI refreshes."""
@@ -763,6 +873,47 @@ class TestPDFViewer:
         # status label should report 1 page applied (source excluded)
         assert "1 page" in mw.status_label.text()
 
+    def test_apply_box_triggers_recognition(self, project_with_data, monkeypatch):
+        """Recognition should start automatically when boxes are applied."""
+        from ui.main_window import MainWindow
+        from PyQt5.QtWidgets import QMessageBox
+        from PyQt5.QtCore import Qt
+        from models.data_models import BoxInfo
+
+        # silence confirmation dialog
+        monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.Yes)
+
+        mw = MainWindow()
+        mw._project_data = project_with_data
+        mw._refresh_all()
+
+        pdf_file = project_with_data.pdf_files[0]
+        page0 = pdf_file.pages[0]
+        page1 = pdf_file.pages[1]
+        # add a source box on page1
+        page1.boxes.append(BoxInfo(column_name="Title", x=0.1, y=0.1, width=0.1, height=0.1))
+
+        mw._current_file_path = pdf_file.file_path
+        mw._current_page_num = page1.page_number
+
+        # select both pages
+        tree = mw.pdf_tree.tree
+        for i in range(tree.topLevelItemCount()):
+            file_item = tree.topLevelItem(i)
+            for j in range(file_item.childCount()):
+                item = file_item.child(j)
+                pn = item.data(0, Qt.UserRole + 1)
+                if pn in (page0.page_number, page1.page_number):
+                    item.setSelected(True)
+
+        # patch recognizer
+        called = []
+        import types
+        mw._on_recognize_text = types.MethodType(lambda self=None: called.append(True), mw)
+
+        mw._on_apply_box()
+        assert called, "Recognition should be triggered"
+
     def test_apply_box_skips_same_page(self, project_with_data, monkeypatch):
         """Applying boxes should not attempt to modify the page currently
         being used as the source.
@@ -801,12 +952,19 @@ class TestPDFViewer:
                 if pn == page0.page_number:
                     item.setSelected(True)
 
+        # patch recognizer to make sure it's not invoked since nothing should
+        # change
+        called = []
+        import types
+        mw._on_recognize_text = types.MethodType(lambda self=None: called.append(True), mw)
+
         mw._on_apply_box()
 
         # nothing should have changed
         assert len(page0.boxes) == 1
         # status should clearly indicate that zero pages were applied
         assert "0 page" in mw.status_label.text()
+        assert not called, "Recognition should not run when no pages modified"
 
     def test_single_page_mode_checkbox_in_main_toolbar(self):
         """The SPM toggle should be part of the main window's top toolbar.

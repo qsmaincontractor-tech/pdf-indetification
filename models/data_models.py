@@ -329,6 +329,9 @@ class ProjectData:
     last_saved_time: str = ""
     last_selected_file: str = ""
     last_selected_page: int = -1
+    # remember which page (if any) was highlighted in the template manager dialog
+    # stored as a tuple (file_path, page_number)
+    last_template_manager_page: tuple = field(default_factory=lambda: ("", -1))
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization.
@@ -345,6 +348,7 @@ class ProjectData:
             "last_saved_time": self.last_saved_time,
             "last_selected_file": self.last_selected_file,
             "last_selected_page": self.last_selected_page,
+            "last_template_manager_page": list(self.last_template_manager_page),
         }
 
     @classmethod
@@ -372,6 +376,7 @@ class ProjectData:
             last_saved_time=data.get("last_saved_time", ""),
             last_selected_file=data.get("last_selected_file", ""),
             last_selected_page=data.get("last_selected_page", -1),
+            last_template_manager_page=tuple(data.get("last_template_manager_page", ["", -1])),
         )
 
     def save_to_json(self, file_path: str) -> None:

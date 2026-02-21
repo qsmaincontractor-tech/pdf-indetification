@@ -12,6 +12,9 @@ A desktop application for extracting structured text data from PDF files using v
 - **Excel export** — Export all data to a formatted `.xlsx` file with two sheets: PDF File List and PDF Page List
 - **3-column UI** — PDF tree view | Data table | PDF page viewer with zoom, pan, and box editing
   - Page selection behaviour: single-click changes selection only (so you can Ctrl/Shift multi-select pages); **double-click** a page in the PDF Page List to open it in the viewer.
+  - **Keyboard shortcuts:**
+    - Use left/right arrows in the PDF viewer to move to the previous/next page (when no box is selected).
+    - When the data table has focus on any fixed column (File Name, File Path or Page #), left/right also navigates pages.
 
 ## Requirements
 

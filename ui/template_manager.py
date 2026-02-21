@@ -64,6 +64,16 @@ class TemplateManagerDialog(QDialog):
             chk_item.setCheckState(Qt.Unchecked)
             self.page_table.setItem(row, 1, chk_item)
 
+        # if we have a previously selected page, re-select its row so the user
+        # sees where they left off (especially after reopen)
+        last_sel = getattr(self.project_data, "last_template_manager_page", ("", -1))
+        if last_sel and last_sel[0] and last_sel[1] >= 0:
+            for row in range(self.page_table.rowCount()):
+                data = self.page_table.item(row, 0).data(Qt.UserRole)
+                if data == last_sel:
+                    self.page_table.selectRow(row)
+                    break
+
     def _on_template_item_changed(self, item):
         row = item.row()
         col = item.column()
@@ -145,7 +155,44 @@ class TemplateManagerDialog(QDialog):
         if not selected_pages:
             QMessageBox.warning(self, "Warning", "Please check at least one page to apply the template to.")
             return
-            
+
+        # Determine the reference page (if parseable) so we can skip it
+        ref_file = None
+        ref_page_num = None
+        if template.ref_page and " - Page " in template.ref_page:
+            parts = template.ref_page.rsplit(" - Page ", 1)
+            if len(parts) == 2:
+                ref_file = parts[0]
+                try:
+                    ref_page_num = int(parts[1]) - 1
+                except ValueError:
+                    ref_page_num = None
+
+        # discard any selected page that matches the ref page
+        filtered = []
+        for file_path, pn in selected_pages:
+            if (
+                ref_file
+                and os.path.basename(file_path) == ref_file
+                and ref_page_num == pn
+            ):
+                continue
+            filtered.append((file_path, pn))
+        if not filtered:
+            QMessageBox.information(
+                self, "Info",
+                "Template was not applied because only the reference page was selected."
+            )
+            return
+        selected_pages = filtered
+
+        # before closing keep the last highlighted page so we can restore it
+        selected_rows = self.page_table.selectedItems()
+        if selected_rows:
+            r = selected_rows[0].row()
+            sel = self.page_table.item(r, 0).data(Qt.UserRole)
+            self.project_data.last_template_manager_page = sel
+
         # Apply template to selected pages
         for file_path, page_num in selected_pages:
             pdf_file = self.project_data.get_file_by_path(file_path)

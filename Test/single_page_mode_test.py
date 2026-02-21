@@ -31,7 +31,7 @@ _app = QApplication.instance()
 if _app is None:
     _app = QApplication(sys.argv)
 
-from models.data_models import ProjectData, PDFFileInfo, PageData, BoxInfo
+from models.data_models import ProjectData, PDFFileInfo, PageData, BoxInfo, ExtractedDataColumn
 from ui.data_table import DataTable
 
 
@@ -396,6 +396,41 @@ class TestPageNavigatedSignal:
         table.btn_next_page.click()
 
         assert len(received) == 0
+
+
+class TestArrowNavigationInTable:
+    def test_arrow_keys_in_fixed_columns_navigate(self, table, two_file_project):
+        """Left/right arrow keys in first/second/page-number columns change page."""
+        table.refresh()
+        # ensure there are at least two rows
+        assert table.table.rowCount() >= 2
+        received = []
+        table.cell_selected.connect(lambda fp, pg, cn: received.append((fp, pg, cn)))
+
+        # focus first column row 0
+        table.table.setCurrentCell(0, table.COL_FILE_NAME)
+        ev = QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Right, Qt.NoModifier)
+        QApplication.sendEvent(table.table, ev)
+        assert received and received[-1][1] == 1
+        # left arrow back to page 0
+        ev = QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Left, Qt.NoModifier)
+        QApplication.sendEvent(table.table, ev)
+        assert received[-1][1] == 0
+
+    def test_arrow_keys_do_not_navigate_in_data_columns(self, table, two_file_project):
+        """Arrow keys in data columns should not trigger navigation."""
+        table.refresh()
+        # add an extra column so we have a data column
+        table._project_data.columns.append(ExtractedDataColumn(name="Foo"))
+        table.refresh()
+        # focus first data column
+        col_index = table.FIXED_COL_COUNT
+        table.table.setCurrentCell(0, col_index)
+        recorded = []
+        table.cell_selected.connect(lambda fp, pg, cn: recorded.append((fp, pg, cn)))
+        ev = QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Right, Qt.NoModifier)
+        QApplication.sendEvent(table.table, ev)
+        assert not recorded
 
 
 # ---------------------------------------------------------------------------

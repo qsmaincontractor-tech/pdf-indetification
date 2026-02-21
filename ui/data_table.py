@@ -560,6 +560,28 @@ class DataTable(QWidget):
                         self.cell_delete_requested.emit(file_path, page_number, column_name)
                         # eat the event so default behaviour (if any) stops
                         return True
+            # navigation via left/right when in first two fixed columns
+            if key in (Qt.Key_Left, Qt.Key_Right):
+                current = self.table.currentItem()
+                if current is not None:
+                    col = self.table.currentColumn()
+                    if col in (self.COL_FILE_NAME, self.COL_FILE_PATH, self.COL_PAGE_NUM):
+                        info = self.get_selected_cell_info()
+                        if info is not None:
+                            file_path, page_number, _ = info
+                            pdf_file = self._project_data.get_file_by_path(file_path)
+                            if pdf_file:
+                                if key == Qt.Key_Left and page_number > 0:
+                                    new_page = page_number - 1
+                                elif key == Qt.Key_Right and page_number < len(pdf_file.pages) - 1:
+                                    new_page = page_number + 1
+                                else:
+                                    new_page = None
+                                if new_page is not None:
+                                    # emit same as a click so main window will load
+                                    self.cell_selected.emit(file_path, new_page, "")
+                                    return True
+        return super().eventFilter(obj, event)
         return super().eventFilter(obj, event)
 
     def _on_columns_visibility(self) -> None:

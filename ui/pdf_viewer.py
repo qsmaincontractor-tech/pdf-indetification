@@ -590,26 +590,37 @@ class PDFViewerCanvas(QWidget):
                 self.update()
             return
         elif event.key() in (Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right):
-            for box in self._boxes:
-                if box.selected:
-                    ox, oy, iw, ih = self._get_image_display_params()
-                    if iw > 0 and ih > 0:
-                        # Move by 1 pixel in display coordinates, or 10 pixels if Shift is held
-                        step = 10 if event.modifiers() & Qt.ShiftModifier else 1
-                        delta_x = step / iw
-                        delta_y = step / ih
-                        
-                        if event.key() == Qt.Key_Up:
-                            box.rel_y = max(0.0, box.rel_y - delta_y)
-                        elif event.key() == Qt.Key_Down:
-                            box.rel_y = min(1.0 - box.rel_h, box.rel_y + delta_y)
-                        elif event.key() == Qt.Key_Left:
-                            box.rel_x = max(0.0, box.rel_x - delta_x)
-                        elif event.key() == Qt.Key_Right:
-                            box.rel_x = min(1.0 - box.rel_w, box.rel_x + delta_x)
-                        
-                        self.update()
-                    break
+            # if any box is selected we treat arrows as box-move commands
+            selected_box = any(box.selected for box in self._boxes)
+            if selected_box:
+                for box in self._boxes:
+                    if box.selected:
+                        ox, oy, iw, ih = self._get_image_display_params()
+                        if iw > 0 and ih > 0:
+                            # Move by 1 pixel in display coordinates, or 10 pixels if Shift is held
+                            step = 10 if event.modifiers() & Qt.ShiftModifier else 1
+                            delta_x = step / iw
+                            delta_y = step / ih
+                            
+                            if event.key() == Qt.Key_Up:
+                                box.rel_y = max(0.0, box.rel_y - delta_y)
+                            elif event.key() == Qt.Key_Down:
+                                box.rel_y = min(1.0 - box.rel_h, box.rel_y + delta_y)
+                            elif event.key() == Qt.Key_Left:
+                                box.rel_x = max(0.0, box.rel_x - delta_x)
+                            elif event.key() == Qt.Key_Right:
+                                box.rel_x = min(1.0 - box.rel_w, box.rel_x + delta_x)
+                            
+                            self.update()
+                        break
+            else:
+                # no box selected, arrow keys requested navigation
+                if event.key() == Qt.Key_Left:
+                    self.page_requested.emit(-1)
+                    return
+                elif event.key() == Qt.Key_Right:
+                    self.page_requested.emit(1)
+                    return
         super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event: QKeyEvent):
@@ -660,6 +671,10 @@ class PDFViewer(QWidget):
     box_selected = pyqtSignal(str)
     zoom_changed = pyqtSignal(float)
     single_page_mode_toggled = pyqtSignal(bool)
+    # emitted when the user presses left/right while no box is selected; value
+    # is -1 for previous or +1 for next page.  The main window listens and
+    # updates the tree/viewer accordingly.
+    page_requested = pyqtSignal(int)
     
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)

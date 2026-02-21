@@ -302,6 +302,8 @@ class MainWindow(QMainWindow):
         # also listen to delete requests coming from the data table
         self.data_table.cell_delete_requested.connect(self._on_table_cell_deleted)
         self.pdf_viewer.box_selected.connect(self._on_box_selected_in_viewer)
+        # page navigation keys from the viewer
+        self.pdf_viewer.page_requested.connect(self._on_viewer_page_requested)
         
         # Template Manager
         self.btn_new_template.clicked.connect(self._on_new_template)
@@ -359,7 +361,7 @@ class MainWindow(QMainWindow):
     # ===== Page Selection =====
     
     def _on_page_selected(self, file_path: str, page_number: int) -> None:
-        """Handle page selection from the tree view."""
+        """Handle page selection from the tree view (or other source)."""
         self._current_file_path = file_path
         self._current_page_num = page_number
         
@@ -389,6 +391,23 @@ class MainWindow(QMainWindow):
         # Save selection state
         self._project_data.last_selected_file = file_path
         self._project_data.last_selected_page = page_number
+
+    def _on_viewer_page_requested(self, delta: int) -> None:
+        """Slot called when PDFViewer arrow keys request previous/next page.
+
+        ``delta`` is -1 for left arrow (previous) or +1 for right arrow (next).
+        """
+        if not self._current_file_path or self._current_page_num < 0:
+            return
+        pdf_file = self._project_data.get_file_by_path(self._current_file_path)
+        if not pdf_file:
+            return
+        new_index = self._current_page_num + delta
+        if new_index < 0 or new_index >= len(pdf_file.pages):
+            return
+        # navigate to the page and update tree
+        self.pdf_tree.select_page(self._current_file_path, new_index)
+        self._on_page_selected(self._current_file_path, new_index)
         
         self._update_status(f"Viewing: {os.path.basename(file_path)} - Page {page_number + 1}")
     
@@ -460,6 +479,11 @@ class MainWindow(QMainWindow):
         if dialog.exec_():
             self._update_template_combo()
             self._refresh_all()
+            # after templates have been edited/applied we may have new boxes
+            # on pages; run recognition on whatever pages are currently
+            # selected so the data table updates automatically.
+            if self.pdf_tree.get_selected_pages():
+                self._on_recognize_text()
 
     def _on_apply_template(self):
         if not self._current_file_path or self._current_page_num < 0:
@@ -478,6 +502,28 @@ class MainWindow(QMainWindow):
         if not template:
             return
             
+        # skip the operation if the user is trying to apply the template to
+        # the very page it was created from; this would simply clear and
+        # re‑write the same boxes with no benefit (requirement #3).
+        if template.ref_page:
+            parts = template.ref_page.rsplit(" - Page ", 1)
+            if len(parts) == 2:
+                ref_file, ref_page_str = parts
+                try:
+                    ref_page_num = int(ref_page_str) - 1
+                except ValueError:
+                    ref_page_num = None
+                if (
+                    ref_page_num is not None
+                    and os.path.basename(self._current_file_path) == ref_file
+                    and ref_page_num == self._current_page_num
+                ):
+                    QMessageBox.information(
+                        self, "Info",
+                        "Template source page is already selected; nothing to apply."
+                    )
+                    return
+
         pdf_file = self._project_data.get_file_by_path(self._current_file_path)
         if not pdf_file:
             return
@@ -508,7 +554,14 @@ class MainWindow(QMainWindow):
         
         # refresh UI then ensure the page we started on is still active
         self._refresh_all()
-        self._on_page_selected(self._current_file_path, self._current_page_num)
+        # the tree populate call above may clear the selection, so explicitly
+        # re-select the page in both the tree and viewer
+        if self._current_file_path and self._current_page_num >= 0:
+            self.pdf_tree.select_page(self._current_file_path, self._current_page_num)
+            self._on_page_selected(self._current_file_path, self._current_page_num)
+        # after boxes are in place, trigger text recognition so the user sees
+        # extracted results without extra clicks (requirement #2)
+        self._on_recognize_text()
         QMessageBox.information(self, "Success", f"Template '{template_name}' applied to current page.")
 
     # ===== Table Cell Selection =====
@@ -913,6 +966,11 @@ class MainWindow(QMainWindow):
         self.data_table.refresh()
         # L3: Report the number actually modified (excluding source page)
         self._update_status(f"Box coordinates applied to {applied} page(s)")
+
+        # Automatically run recognition on the current selection so the user
+        # sees extracted text straight away (requirement #1).
+        if self.pdf_tree.get_selected_pages():
+            self._on_recognize_text()
     
     def _on_recognize_text(self) -> None:
         """Extract text from drawn boxes for selected pages."""
