@@ -303,6 +303,9 @@ class MainWindow(QMainWindow):
         self.btn_new_template.clicked.connect(self._on_new_template)
         self.btn_manage_template.clicked.connect(self._on_manage_template)
         self.btn_apply_template.clicked.connect(self._on_apply_template)
+
+        # track changes to the template combo so we can remember the choice
+        self.combo_template.currentTextChanged.connect(self._on_template_changed)
     
     def _update_status(self, message: str) -> None:
         """Update the status bar message."""
@@ -386,9 +389,22 @@ class MainWindow(QMainWindow):
         self._update_status(f"Viewing: {os.path.basename(file_path)} - Page {page_number + 1}")
     
     def _update_template_combo(self):
+        """Populate the template dropdown and restore previous selection.
+
+        The project data stores the last template the user selected so that the
+        combo box can retain its choice when the UI is refreshed (for example
+        when a template is applied or the project is reloaded).  If the stored
+        name no longer exists we simply leave the first item selected.
+        """
+        last = getattr(self._project_data, "last_selected_template", "")
         self.combo_template.clear()
         for template in self._project_data.templates:
             self.combo_template.addItem(template.name)
+
+        if last:
+            idx = self.combo_template.findText(last)
+            if idx >= 0:
+                self.combo_template.setCurrentIndex(idx)
 
     def _on_new_template(self):
         if not self._current_file_path or self._current_page_num < 0:
@@ -427,10 +443,11 @@ class MainWindow(QMainWindow):
             self._project_data.templates.append(template)
             self._update_template_combo()
             
-            # Select the newly created template
+            # Select the newly created template and remember it
             index = self.combo_template.findText(name)
             if index >= 0:
                 self.combo_template.setCurrentIndex(index)
+                self._project_data.last_selected_template = name
                 
             QMessageBox.information(self, "Success", f"Template '{name}' created successfully.")
 
@@ -450,6 +467,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Warning", "Please select a template to apply.")
             return
             
+        # remember the choice in project data so the dropdown can be restored
+        self._project_data.last_selected_template = template_name
+
         template = next((t for t in self._project_data.templates if t.name == template_name), None)
         if not template:
             return
@@ -482,6 +502,7 @@ class MainWindow(QMainWindow):
                 new_box.column_name, text,
             )
         
+        # refresh UI then ensure the page we started on is still active
         self._refresh_all()
         self._on_page_selected(self._current_file_path, self._current_page_num)
         QMessageBox.information(self, "Success", f"Template '{template_name}' applied to current page.")
@@ -650,6 +671,18 @@ class MainWindow(QMainWindow):
 
     # ===== Toolbar Actions =====
     
+    def _on_template_changed(self, template_name: str) -> None:
+        """Slot triggered when the user picks a different template.
+
+        We store the selection on ``ProjectData`` so that subsequent UI refreshes
+        can restore the same item.  The slot is intentionally simple since the
+        combobox text can change when the contents are repopulated; callers
+        should update the field before calling ``_update_template_combo`` when
+        they wish to preserve an existing choice.
+        """
+        if template_name:
+            self._project_data.last_selected_template = template_name
+
     def _on_import(self) -> None:
         """Import PDF files from a selected folder."""
         directory = QFileDialog.getExistingDirectory(
@@ -823,9 +856,22 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Info", "No boxes drawn on the current page.")
             return
         
+        # Exclude the current page from the targets so we never apply to it.  This
+        # also makes reporting and progress calculations easier.
+        targets = [p for p in selected
+                   if not (p[0] == self._current_file_path and p[1] == self._current_page_num)]
+
+        if not targets:
+            # nothing to do; warn the user and exit early
+            QMessageBox.information(
+                self, "Info",
+                "Current page is the only one selected; no pages will be modified."
+            )
+            return
+
         reply = QMessageBox.question(
             self, "Confirm",
-            f"Apply box coordinates from current page to {len(selected)} page(s)?",
+            f"Apply box coordinates from current page to {len(targets)} page(s)?",
             QMessageBox.Yes | QMessageBox.No,
         )
         if reply != QMessageBox.Yes:
@@ -833,20 +879,19 @@ class MainWindow(QMainWindow):
         
         self._update_status("Applying drawn box to selected pages...")
         count = 0
-        total = len(selected)
+        total = len(targets)
         applied = 0
         
-        for file_path, page_num in selected:
-            # Skip the source page
-            if file_path == self._current_file_path and page_num == self._current_page_num:
-                count += 1
-                self._show_progress(count, total)
-                continue
-            
+        for file_path, page_num in targets:
             pdf_file = self._project_data.get_file_by_path(file_path)
             if pdf_file:
                 page = pdf_file.get_page(page_num)
                 if page:
+                    # clear any existing boxes/data on the target page so we don't
+                    # accumulate duplicates when the user applies multiple times
+                    page.boxes.clear()
+                    page.extracted_data.clear()
+
                     for source_box in source_page.boxes:
                         new_box = BoxInfo(
                             column_name=source_box.column_name,

@@ -324,6 +324,8 @@ class ProjectData:
     pdf_files: List[PDFFileInfo] = field(default_factory=list)
     columns: List[ExtractedDataColumn] = field(default_factory=list)
     templates: List[Template] = field(default_factory=list)
+    # name of the template most recently chosen in the main window combo box
+    last_selected_template: str = ""
     last_saved_time: str = ""
     last_selected_file: str = ""
     last_selected_page: int = -1
@@ -339,6 +341,7 @@ class ProjectData:
             "pdf_files": [f.to_dict() for f in self.pdf_files],
             "columns": [c.to_dict() for c in self.columns],
             "templates": [t.to_dict() for t in self.templates],
+            "last_selected_template": self.last_selected_template,
             "last_saved_time": self.last_saved_time,
             "last_selected_file": self.last_selected_file,
             "last_selected_page": self.last_selected_page,
@@ -365,6 +368,7 @@ class ProjectData:
                 ExtractedDataColumn.from_dict(c) for c in data.get("columns", [])
             ],
             templates=[Template.from_dict(t) for t in data.get("templates", [])],
+            last_selected_template=data.get("last_selected_template", ""),
             last_saved_time=data.get("last_saved_time", ""),
             last_selected_file=data.get("last_selected_file", ""),
             last_selected_page=data.get("last_selected_page", -1),

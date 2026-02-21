@@ -685,6 +685,129 @@ class TestPDFViewer:
         assert "Col" in page.extracted_data
         assert page.extracted_data["Col"] == mw.data_table.item(0, mw.data_table.FIXED_COL_COUNT).text()
 
+        # combo should still show the same template name and page selection
+        assert mw.combo_template.currentText() == "T1"
+        assert mw._current_file_path == fp
+        assert mw._current_page_num == 0
+        # tree view should continue to report the same selected page
+        assert mw.pdf_tree.get_selected_pages() == [(fp, 0)]
+
+    def test_template_combobox_persists_after_refresh(self, project_with_data):
+        """The dropdown should keep the last-chosen template when UI refreshes."""
+        from ui.main_window import MainWindow
+        from models.data_models import Template, BoxInfo
+
+        mw = MainWindow()
+        mw._project_data = project_with_data
+        # add two templates
+        tpl1 = Template(name="A", ref_page="", boxes=[])
+        tpl2 = Template(name="B", ref_page="", boxes=[])
+        mw._project_data.templates.extend([tpl1, tpl2])
+        mw._update_template_combo()
+
+        # choose second template and verify storage
+        mw.combo_template.setCurrentText("B")
+        assert mw._project_data.last_selected_template == "B"
+        # force a refresh which would normally clear the selection
+        mw._refresh_all()
+        assert mw.combo_template.currentText() == "B"
+
+    def test_apply_box_clears_existing_boxes(self, project_with_data, monkeypatch):
+        """Applying a box to other pages should first delete any previous boxes."""
+        from ui.main_window import MainWindow
+        from PyQt5.QtWidgets import QMessageBox
+        from PyQt5.QtCore import Qt
+        from models.data_models import BoxInfo
+
+        # silence confirmation dialog
+        monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.Yes)
+
+        # prepare two pages in the project
+        pdf_file = project_with_data.pdf_files[0]
+        page0 = pdf_file.pages[0]
+        page1 = pdf_file.pages[1]
+        # add an "old" box to page0 that should be wiped
+        page0.boxes.append(BoxInfo(column_name="Old", x=0.5, y=0.5, width=0.2, height=0.2))
+        page0.extracted_data["Old"] = "value"
+        # add a source box on page1
+        page1.boxes.append(BoxInfo(column_name="Title", x=0.1, y=0.1, width=0.1, height=0.1))
+
+        mw = MainWindow()
+        mw._project_data = project_with_data
+        mw._refresh_all()
+
+        # set current page to page1 (source page)
+        mw._current_file_path = pdf_file.file_path
+        mw._current_page_num = page1.page_number
+
+        # select both pages in the tree
+        tree = mw.pdf_tree.tree
+        for i in range(tree.topLevelItemCount()):
+            file_item = tree.topLevelItem(i)
+            for j in range(file_item.childCount()):
+                item = file_item.child(j)
+                pn = item.data(0, Qt.UserRole + 1)
+                if pn in (page0.page_number, page1.page_number):
+                    item.setSelected(True)
+
+        # perform apply operation
+        mw._on_apply_box()
+
+        # page0 should no longer contain the old box, only the source's box
+        assert len(page0.boxes) == 1
+        assert page0.boxes[0].column_name == "Title"
+        assert page0.extracted_data == {}
+        # source page should be unchanged
+        assert len(page1.boxes) == 1
+        assert page1.boxes[0].column_name == "Title"
+        # status label should report 1 page applied (source excluded)
+        assert "1 page" in mw.status_label.text()
+
+    def test_apply_box_skips_same_page(self, project_with_data, monkeypatch):
+        """Applying boxes should not attempt to modify the page currently
+        being used as the source.
+
+        If the user only has the source page selected, the operation should
+        exit early with an informational message and the status text should
+        indicate that zero pages were changed.
+        """
+        from ui.main_window import MainWindow
+        from PyQt5.QtWidgets import QMessageBox
+        from PyQt5.QtCore import Qt
+        from models.data_models import BoxInfo
+
+        # silence confirmation dialog
+        monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.Yes)
+
+        mw = MainWindow()
+        mw._project_data = project_with_data
+        mw._refresh_all()
+
+        pdf_file = project_with_data.pdf_files[0]
+        page0 = pdf_file.pages[0]
+        # add a box to the source page
+        page0.boxes.append(BoxInfo(column_name="Title", x=0.1, y=0.1, width=0.1, height=0.1))
+
+        mw._current_file_path = pdf_file.file_path
+        mw._current_page_num = page0.page_number
+
+        # select only the source page in the tree
+        tree = mw.pdf_tree.tree
+        for i in range(tree.topLevelItemCount()):
+            file_item = tree.topLevelItem(i)
+            for j in range(file_item.childCount()):
+                item = file_item.child(j)
+                pn = item.data(0, Qt.UserRole + 1)
+                if pn == page0.page_number:
+                    item.setSelected(True)
+
+        mw._on_apply_box()
+
+        # nothing should have changed
+        assert len(page0.boxes) == 1
+        # status should clearly indicate that zero pages were applied
+        assert "0 page" in mw.status_label.text()
+
     def test_single_page_mode_checkbox_in_main_toolbar(self):
         """The SPM toggle should be part of the main window's top toolbar.
 
