@@ -15,7 +15,7 @@ import sys
 import pytest
 
 # We need a QApplication for widget tests
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QCheckBox
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt, QPointF
 
@@ -299,6 +299,32 @@ class TestPDFViewer:
         viewer = PDFViewer()
         viewer.set_active_column("Title")
         assert viewer.canvas._active_column == "Title"
+
+    def test_viewer_contains_spm_checkbox(self):
+        """Viewer still exposes a checkbox object (hidden) for compatibility."""
+        viewer = PDFViewer()
+        assert hasattr(viewer, "chk_single_page_mode")
+        assert isinstance(viewer.chk_single_page_mode, QCheckBox)
+        # it should not be visible because control moved to main toolbar
+        assert not viewer.chk_single_page_mode.isVisible()
+
+    def test_spm_checkbox_signal(self):
+        """Hidden checkbox still emits viewer signal when programmatically toggled."""
+        viewer = PDFViewer()
+        recorded = []
+        viewer.single_page_mode_toggled.connect(lambda s: recorded.append(s))
+        viewer.chk_single_page_mode.setChecked(True)
+        assert recorded == [True]
+        viewer.chk_single_page_mode.setChecked(False)
+        assert recorded == [True, False]
+
+    def test_set_single_page_mode_method(self):
+        """Calling ``set_single_page_mode`` should update the hidden checkbox state."""
+        viewer = PDFViewer()
+        viewer.set_single_page_mode(True)
+        assert viewer.chk_single_page_mode.isChecked()
+        viewer.set_single_page_mode(False)
+        assert not viewer.chk_single_page_mode.isChecked()
     
     def test_set_boxes(self):
         """Test setting boxes to display."""
@@ -341,6 +367,20 @@ class TestPDFViewer:
         viewer.canvas._pan_offset = QPointF(10, 20)
         viewer.btn_center.click()
         assert viewer.canvas._pan_offset == QPointF(0, 0)
+
+    def test_clear_box_button_erases_selection(self):
+        """The clear-box button should remove the highlighted box and emit signal."""
+        viewer = PDFViewer()
+        boxes = [BoxInfo(column_name="Title", x=0.1, y=0.1, width=0.2, height=0.2)]
+        viewer.set_boxes(boxes)
+        viewer.highlight_box("Title")
+        assert any(b.selected for b in viewer.get_boxes())
+
+        deleted = []
+        viewer.box_deleted.connect(lambda col: deleted.append(col))
+        viewer.btn_clear_box.click()
+        assert deleted == ["Title"]
+        assert viewer.get_boxes() == []
 
     def test_center_on_box_scrolls_to_box(self):
         """Centering on an existing box should move scrollbars so the box is visible."""
@@ -433,6 +473,41 @@ class TestPDFViewer:
         # Label should start with the 'OCR:' prefix so UI shows the debug state
         assert window.ocr_label.text().startswith("OCR:")
 
+    def test_clicking_spm_checkbox_enables_table(self, project_with_data):
+        """Toggling the Single Page Mode checkbox should change the table mode."""
+        from ui.main_window import MainWindow
+
+        mw = MainWindow()
+        mw._project_data = project_with_data
+        mw._refresh_all()
+        # ensure we start off in normal mode
+        assert not mw.data_table.single_page_mode
+        mw.chk_single_page_mode.click()
+        assert mw.data_table.single_page_mode
+        # programmatically toggling the table should synchronise back to main toolbar
+        mw.data_table.set_single_page_mode(False)
+        assert not mw.chk_single_page_mode.isChecked()
+
+    def test_single_page_mode_checkbox_in_main_toolbar(self):
+        """The SPM toggle should be part of the main window's top toolbar.
+
+        The viewer no longer displays the control, but the main window still
+        exposes it via ``chk_single_page_mode`` for legacy consumers.
+        """
+        from ui.main_window import MainWindow
+
+        win = MainWindow()
+        assert hasattr(win, "chk_single_page_mode")
+        cb = win.chk_single_page_mode
+        # parent of checkbox should be the main window's toolbar
+        from PyQt5.QtWidgets import QToolBar
+        toolbar = win.findChild(QToolBar)
+        assert toolbar is not None
+        assert cb.parent() is toolbar
+        # still only one toolbar present
+        toolbars = win.findChildren(QToolBar)
+        assert len(toolbars) == 1
+
     def test_click_fixed_column_updates_viewer(self, project_with_data, monkeypatch):
         """A single click on any table column should load the corresponding page."""
         # patch rendering to avoid file IO
@@ -453,3 +528,45 @@ class TestPDFViewer:
 
         assert mw._current_file_path == project_with_data.pdf_files[0].file_path
         assert mw._current_page_num == project_with_data.pdf_files[0].pages[0].page_number
+
+    def test_clear_box_button_updates_main_window(self, project_with_data, monkeypatch):
+        """Pressing the clear-box toolbar button should remove the box and clear table cell."""
+        from ui.main_window import MainWindow
+        import ui.main_window as mwmod
+        # stub rendering again
+        monkeypatch.setattr(mwmod, "render_pdf_page", lambda fp, pn, zoom=1.5: b"dummy")
+
+        mw = MainWindow()
+        mw._project_data = project_with_data
+        mw._refresh_all()
+
+        # configure a box on first page and update its data
+        pdf_file = project_with_data.pdf_files[0]
+        page = pdf_file.pages[0]
+        page.boxes.append(BoxInfo(column_name="Title", x=0.1, y=0.1, width=0.2, height=0.2))
+        page.extracted_data["Title"] = "foo"
+
+        # ensure the table shows our updated value (simulate a prior extraction)
+        mw.data_table.update_cell_value(pdf_file.file_path, page.page_number,
+                                        "Title", "foo")
+
+        # load that page into viewer
+        mw._current_file_path = pdf_file.file_path
+        mw._current_page_num = page.page_number
+        mw.pdf_viewer.set_boxes(page.boxes)
+
+        # sanity check: table really contains foo before we clear
+        user_cols = mw._project_data.get_column_names()
+        assert "Title" in user_cols
+        col_pos = user_cols.index("Title")
+        extracted_col = mw.data_table.FIXED_COL_COUNT + col_pos
+        assert mw.data_table.table.item(0, extracted_col).text().startswith("foo")
+
+        # highlight the box in the viewer so the clear command operates on it
+        mw.pdf_viewer.highlight_box("Title")
+
+        # click clear button and check it disappears
+        mw.pdf_viewer.btn_clear_box.click()
+        assert page.boxes == []
+        # verify table cell cleared as well
+        assert mw.data_table.table.item(0, extracted_col).text() == ""

@@ -33,6 +33,7 @@
         - ctrl + press middle mouse button to pan the image
         - Draw the box on the PDF page to prepare for data extraction
             - the box can be moved, resized, and deleted
+            - a dedicated **Clear Box** toolbar button (alongside the zoom controls) will delete the currently highlighted box
             - the box will be highlighted in the 2nd column when selected
             - Select the cell in the 2nd column and the corresponding box will be highlighted in the 3rd column; the viewer will also attempt to centre/focus that box so it is visible to the user
             - if drag the box anywhere outside the existing box, it will be changed to new box
@@ -41,6 +42,7 @@
 
     Top Toolbar:
         - Import PDF file(s) button: select a folder directory, and walk through all folder and subfolder to find PDF files, then extract the PDF page list and show in the 1st column, and extract the data defined by user and show in the 2nd column
+        - the main toolbar at the top of the window contains the "Single Page Mode" toggle which mirrors the behaviour of the data table control (the viewer no longer has its own checkbox)
         - Save Button: save as JSON file, including the PDF file list, PDF page list, extracted data, and the box information, last saved time, last pdf page selected for future opening and loading
         - Load Button: load the JSON file 
         - Clear Extracted Data button: clear all extracted data in 2nd column for selected PDF page(s) in the 1st column, and clear the corresponding boxes in the 3rd column

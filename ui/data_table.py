@@ -38,6 +38,9 @@ from typing import Optional, List, Tuple
 from models.data_models import ProjectData
 
 
+from PyQt5 import uic
+import os
+
 # QTableWidgetItem subclass that supports a separate sort key (used for numeric sorting)
 class SortableTableWidgetItem(QTableWidgetItem):
     """Table item that will compare using an explicit sort-key when present.
@@ -81,6 +84,7 @@ class DataTable(QWidget):
     cell_selected = pyqtSignal(str, int, str)
     data_edited = pyqtSignal(str, int, str, str)
     page_navigated = pyqtSignal(str, int)  # Emitted when SPM prev/next navigation changes page
+    single_page_mode_changed = pyqtSignal(bool)  # signal when SPM state is toggled
     
     # Fixed columns
     COL_FILE_NAME = 0
@@ -99,89 +103,19 @@ class DataTable(QWidget):
         self._spm_pages_flat: List[Tuple[str, int]] = []  # (file_path, page_number)
         self._spm_index: int = -1  # index into _spm_pages_flat
 
-        self._setup_ui()
-    
-    def _setup_ui(self):
-        """Initialize the UI layout with table and buttons."""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        ui_path = os.path.join(os.path.dirname(__file__), "data_table.ui")
+        uic.loadUi(ui_path, self)
         
-        # Header
-        header = QLabel("Extracted Data")
-        header.setFont(QFont("Segoe UI", 10, QFont.Bold))
-        header.setStyleSheet("padding: 6px; background-color: #f0f0f0; border-bottom: 1px solid #ccc;")
-        layout.addWidget(header)
-
-        # Single Page Mode navigation bar (hidden by default)
-        self.spm_nav_bar = QWidget()
-        self.spm_nav_bar.setStyleSheet(
-            "background-color: #e8f0fe; border-bottom: 1px solid #aac4f0;"
-        )
-        spm_nav_layout = QHBoxLayout(self.spm_nav_bar)
-        spm_nav_layout.setContentsMargins(6, 4, 6, 4)
-        spm_nav_layout.setSpacing(6)
-
-        self.spm_page_label = QLabel("No page selected")
-        self.spm_page_label.setFont(QFont("Segoe UI", 9))
-        spm_nav_layout.addWidget(self.spm_page_label, 1)
-
-        self.btn_prev_page = QPushButton("← Previous")
-        self.btn_prev_page.setToolTip("Navigate to the previous page")
-        self.btn_prev_page.setEnabled(False)
-        self.btn_prev_page.clicked.connect(self._on_prev_page)
-        spm_nav_layout.addWidget(self.btn_prev_page)
-
-        self.btn_next_page = QPushButton("Next →")
-        self.btn_next_page.setToolTip("Navigate to the next page")
-        self.btn_next_page.setEnabled(False)
-        self.btn_next_page.clicked.connect(self._on_next_page)
-        spm_nav_layout.addWidget(self.btn_next_page)
-
         self.spm_nav_bar.setVisible(False)
-        layout.addWidget(self.spm_nav_bar)
-
-        # Horizontal separator below nav bar
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setFrameShadow(QFrame.Sunken)
-        sep.setVisible(False)
-        self._spm_separator = sep
-        layout.addWidget(sep)
-
-        # Table
-        self.table = QTableWidget()
-        self.table.setSelectionBehavior(QAbstractItemView.SelectItems)
-        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.table.setSortingEnabled(True)
-        self.table.setAlternatingRowColors(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.verticalHeader().setVisible(False)
+        self._spm_separator.setVisible(False)
+        
+        self.btn_prev_page.clicked.connect(self._on_prev_page)
+        self.btn_next_page.clicked.connect(self._on_next_page)
         self.table.cellClicked.connect(self._on_cell_clicked)
         self.table.cellChanged.connect(self._on_cell_changed)
-        layout.addWidget(self.table)
-        
-        # Button bar
-        btn_layout = QHBoxLayout()
-        btn_layout.setContentsMargins(4, 4, 4, 4)
-        
-        self.btn_add_column = QPushButton("+ Add Column")
-        self.btn_add_column.setToolTip("Add a new extracted data column")
         self.btn_add_column.clicked.connect(self._on_add_column)
-        btn_layout.addWidget(self.btn_add_column)
-        
-        self.btn_remove_column = QPushButton("- Remove Column")
-        self.btn_remove_column.setToolTip("Remove an extracted data column")
         self.btn_remove_column.clicked.connect(self._on_remove_column)
-        btn_layout.addWidget(self.btn_remove_column)
-        
-        self.btn_columns_visibility = QPushButton("Show/Hide Columns")
-        self.btn_columns_visibility.setToolTip("Toggle column visibility")
         self.btn_columns_visibility.clicked.connect(self._on_columns_visibility)
-        btn_layout.addWidget(self.btn_columns_visibility)
-        
-        btn_layout.addStretch()
-        layout.addLayout(btn_layout)
     
     def set_project_data(self, project_data: ProjectData) -> None:
         """
@@ -391,6 +325,9 @@ class DataTable(QWidget):
             enabled: True to enable, False to disable.
         """
         self._single_page_mode = enabled
+        # notify any listeners so external widgets (e.g. MainWindow) can
+        # remain in sync
+        self.single_page_mode_changed.emit(enabled)
         self.spm_nav_bar.setVisible(enabled)
         self._spm_separator.setVisible(enabled)
 

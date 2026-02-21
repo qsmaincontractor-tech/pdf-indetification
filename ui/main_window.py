@@ -39,6 +39,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize
 from PyQt5.QtGui import QIcon, QFont
+from PyQt5 import uic
 
 # Absolute path to the project root (parent of this ui/ package).
 # Passed to subprocess workers so they can import project modules.
@@ -62,6 +63,8 @@ from utils.excel_export import export_to_excel
 from ui.pdf_tree_view import PDFTreeView
 from ui.data_table import DataTable
 from ui.pdf_viewer import PDFViewer
+from ui.template_manager import TemplateManagerDialog
+from PyQt5.QtWidgets import QInputDialog
 
 
 class ImportWorker(QThread):
@@ -214,135 +217,25 @@ class MainWindow(QMainWindow):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("PDF Text Extraction Tool")
-        self.setMinimumSize(1200, 700)
+        ui_path = os.path.join(os.path.dirname(__file__), "main_window.ui")
+        uic.loadUi(ui_path, self)
         
         # Data model
         self._project_data = ProjectData()
         self._current_file_path: str = ""
         self._current_page_num: int = -1
         
-        self._setup_ui()
-        self._setup_toolbar()
-        self._setup_statusbar()
-        self._connect_signals()
-        
-        self._update_status("Ready")
-        # L1/L5: Check OCR availability on startup so the indicator is correct immediately
-        self._update_ocr_status()
-    
-    def _setup_ui(self):
-        """Set up the 3-column layout with splitters."""
-        central = QWidget()
-        self.setCentralWidget(central)
-        main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Splitter for 3 columns
-        self.splitter = QSplitter(Qt.Horizontal)
-        
-        # 1st column: PDF Tree View
-        self.pdf_tree = PDFTreeView()
-        self.splitter.addWidget(self.pdf_tree)
-        
-        # 2nd column: Data Table
-        self.data_table = DataTable()
-        self.splitter.addWidget(self.data_table)
-        
-        # 3rd column: PDF Viewer
-        self.pdf_viewer = PDFViewer()
-        self.splitter.addWidget(self.pdf_viewer)
-        
-        # Set initial proportions
-        self.splitter.setSizes([200, 400, 500])
-        self.splitter.setStretchFactor(0, 1)
-        self.splitter.setStretchFactor(1, 2)
-        self.splitter.setStretchFactor(2, 3)
-        
-        main_layout.addWidget(self.splitter)
-    
-    def _setup_toolbar(self):
-        """Set up the top toolbar with all action buttons."""
-        toolbar = QToolBar("Main Toolbar")
-        toolbar.setMovable(False)
-        toolbar.setIconSize(QSize(24, 24))
-        toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        self.addToolBar(toolbar)
-        
-        # Import PDF Files
-        self.action_import = QAction("Import PDFs", self)
-        self.action_import.setToolTip("Select a folder to import PDF files from all subfolders")
-        self.action_import.triggered.connect(self._on_import)
-        toolbar.addAction(self.action_import)
-        
-        toolbar.addSeparator()
-        
-        # Save
-        self.action_save = QAction("Save", self)
-        self.action_save.setToolTip("Save project as JSON file")
-        self.action_save.setShortcut("Ctrl+S")
-        self.action_save.triggered.connect(self._on_save)
-        toolbar.addAction(self.action_save)
-        
-        # Load
-        self.action_load = QAction("Load", self)
-        self.action_load.setToolTip("Load project from JSON file")
-        self.action_load.setShortcut("Ctrl+O")
-        self.action_load.triggered.connect(self._on_load)
-        toolbar.addAction(self.action_load)
-        
-        toolbar.addSeparator()
-        
-        # Clear Extracted Data
-        self.action_clear = QAction("Clear Data", self)
-        self.action_clear.setToolTip("Clear extracted data for selected pages")
-        self.action_clear.triggered.connect(self._on_clear_data)
-        toolbar.addAction(self.action_clear)
-        
-        # Delete PDF Files
-        self.action_delete = QAction("Delete PDFs", self)
-        self.action_delete.setToolTip("Remove selected PDF files from the project")
-        self.action_delete.triggered.connect(self._on_delete_files)
-        toolbar.addAction(self.action_delete)
-        
-        toolbar.addSeparator()
-        
-        # Apply Drawn Box
-        self.action_apply_box = QAction("Apply Box", self)
-        self.action_apply_box.setToolTip("Apply the drawn box coordinates to selected pages")
-        self.action_apply_box.triggered.connect(self._on_apply_box)
-        toolbar.addAction(self.action_apply_box)
-        
-        # Recognize Text
-        self.action_recognize = QAction("Recognize Text", self)
-        self.action_recognize.setToolTip("Extract text data from drawn boxes for selected pages")
-        self.action_recognize.triggered.connect(self._on_recognize_text)
-        toolbar.addAction(self.action_recognize)
-        
-        toolbar.addSeparator()
-        
-        # Export to Excel
-        self.action_export = QAction("Export Excel", self)
-        self.action_export.setToolTip("Export all data to an Excel file")
-        self.action_export.triggered.connect(self._on_export_excel)
-        toolbar.addAction(self.action_export)
-
-        toolbar.addSeparator()
-
-        # Single Page Mode toggle
-        self.chk_single_page_mode = QCheckBox("Single Page Mode")
-        self.chk_single_page_mode.setToolTip(
-            "Show only the data for the currently selected page in the table"
-        )
-        self.chk_single_page_mode.setChecked(False)
+        # expose its checkbox as an alias for backward compatibility/tests
+        # the single‑page checkbox lives in the main toolbar now; Qt
+        # Designer adds it to the UI so loadUi has already created it.  We
+        # expose it on the window for backward compatibility and wire it up
+        # the same way the old viewer checkbox was handled.
+        self.chk_single_page_mode = self.findChild(QCheckBox, "chk_single_page_mode")
+        assert self.chk_single_page_mode is not None, "toolbar checkbox missing"
         self.chk_single_page_mode.toggled.connect(self._on_single_page_mode_toggled)
-        toolbar.addWidget(self.chk_single_page_mode)
-    
-    def _setup_statusbar(self):
-        """Set up the bottom status bar with labels and progress bar."""
-        self.statusbar = QStatusBar()
-        self.setStatusBar(self.statusbar)
-        
+
+        self._connect_signals()
+
         self.status_label = QLabel("Ready")
         self.statusbar.addWidget(self.status_label, 1)
         
@@ -365,9 +258,23 @@ class MainWindow(QMainWindow):
         self.progress_bar.setMaximumWidth(200)
         self.progress_bar.setVisible(False)
         self.statusbar.addPermanentWidget(self.progress_bar)
+        
+        self._update_status("Ready")
+        # L1/L5: Check OCR availability on startup so the indicator is correct immediately
+        self._update_ocr_status()
     
     def _connect_signals(self):
         """Connect signals between components."""
+        # Toolbar actions
+        self.action_import.triggered.connect(self._on_import)
+        self.action_save.triggered.connect(self._on_save)
+        self.action_load.triggered.connect(self._on_load)
+        self.action_clear.triggered.connect(self._on_clear_data)
+        self.action_delete.triggered.connect(self._on_delete_files)
+        self.action_apply_box.triggered.connect(self._on_apply_box)
+        self.action_recognize.triggered.connect(self._on_recognize_text)
+        self.action_export.triggered.connect(self._on_export_excel)
+        
         # Tree -> show page in viewer and highlight in table
         self.pdf_tree.page_selected.connect(self._on_page_selected)
         
@@ -379,12 +286,21 @@ class MainWindow(QMainWindow):
         
         # Table SPM navigation -> update viewer and tree selection
         self.data_table.page_navigated.connect(self._on_spm_page_navigated)
+        # keep toolbar checkbox in sync if table mode changes programmatically
+        self.data_table.single_page_mode_changed.connect(
+            self.chk_single_page_mode.setChecked
+        )
 
         # Viewer box drawn -> update model and table
         self.pdf_viewer.box_drawn.connect(self._on_box_drawn)
         self.pdf_viewer.box_changed.connect(self._on_box_changed)
         self.pdf_viewer.box_deleted.connect(self._on_box_deleted)
         self.pdf_viewer.box_selected.connect(self._on_box_selected_in_viewer)
+        
+        # Template Manager
+        self.btn_new_template.clicked.connect(self._on_new_template)
+        self.btn_manage_template.clicked.connect(self._on_manage_template)
+        self.btn_apply_template.clicked.connect(self._on_apply_template)
     
     def _update_status(self, message: str) -> None:
         """Update the status bar message."""
@@ -428,6 +344,7 @@ class MainWindow(QMainWindow):
         """Refresh all UI components from the project data."""
         self.pdf_tree.populate(self._project_data)
         self.data_table.set_project_data(self._project_data)
+        self._update_template_combo()
         self._update_info()
     
     # ===== Page Selection =====
@@ -466,6 +383,96 @@ class MainWindow(QMainWindow):
         
         self._update_status(f"Viewing: {os.path.basename(file_path)} - Page {page_number + 1}")
     
+    def _update_template_combo(self):
+        self.combo_template.clear()
+        for template in self._project_data.templates:
+            self.combo_template.addItem(template.name)
+
+    def _on_new_template(self):
+        if not self._current_file_path or self._current_page_num < 0:
+            QMessageBox.warning(self, "Warning", "Please select a page first.")
+            return
+            
+        pdf_file = self._project_data.get_file_by_path(self._current_file_path)
+        if not pdf_file:
+            return
+            
+        page = pdf_file.get_page(self._current_page_num)
+        if not page or not page.boxes:
+            QMessageBox.warning(self, "Warning", "The current page has no boxes to save as a template.")
+            return
+            
+        name, ok = QInputDialog.getText(self, "New Template", "Enter template name:")
+        if ok and name:
+            from models.data_models import Template
+            import copy
+            
+            # Check if name already exists
+            if any(t.name == name for t in self._project_data.templates):
+                QMessageBox.warning(self, "Warning", f"Template '{name}' already exists.")
+                return
+                
+            ref_page = f"{pdf_file.file_name} - Page {self._current_page_num + 1}"
+            
+            # Deep copy boxes and clear extracted text
+            boxes = []
+            for box in page.boxes:
+                new_box = copy.deepcopy(box)
+                new_box.extracted_text = ""
+                boxes.append(new_box)
+                
+            template = Template(name=name, ref_page=ref_page, boxes=boxes)
+            self._project_data.templates.append(template)
+            self._update_template_combo()
+            
+            # Select the newly created template
+            index = self.combo_template.findText(name)
+            if index >= 0:
+                self.combo_template.setCurrentIndex(index)
+                
+            QMessageBox.information(self, "Success", f"Template '{name}' created successfully.")
+
+    def _on_manage_template(self):
+        dialog = TemplateManagerDialog(self._project_data, self)
+        if dialog.exec_():
+            self._update_template_combo()
+            self._refresh_all()
+
+    def _on_apply_template(self):
+        if not self._current_file_path or self._current_page_num < 0:
+            QMessageBox.warning(self, "Warning", "Please select a page first.")
+            return
+            
+        template_name = self.combo_template.currentText()
+        if not template_name:
+            QMessageBox.warning(self, "Warning", "Please select a template to apply.")
+            return
+            
+        template = next((t for t in self._project_data.templates if t.name == template_name), None)
+        if not template:
+            return
+            
+        pdf_file = self._project_data.get_file_by_path(self._current_file_path)
+        if not pdf_file:
+            return
+            
+        page = pdf_file.get_page(self._current_page_num)
+        if not page:
+            return
+            
+        import copy
+        # Clear existing boxes first
+        page.boxes.clear()
+        
+        for box in template.boxes:
+            new_box = copy.deepcopy(box)
+            new_box.extracted_text = ""
+            page.set_box_for_column(new_box)
+            
+        self._refresh_all()
+        self._on_page_selected(self._current_file_path, self._current_page_num)
+        QMessageBox.information(self, "Success", f"Template '{template_name}' applied to current page.")
+
     # ===== Table Cell Selection =====
     
     def _on_table_cell_selected(self, file_path: str, page_number: int, column_name: str) -> None:
@@ -575,8 +582,17 @@ class MainWindow(QMainWindow):
     # ===== Single Page Mode =====
 
     def _on_single_page_mode_toggled(self, enabled: bool) -> None:
-        """Enable or disable Single Page Mode in the data table."""
+        """Enable or disable Single Page Mode in the data table.
+
+        This slot is connected to the checkbox in the *main window* toolbar.
+        We also allow other parts of the code to call it directly, so keep
+        both the toolbar and the hidden viewer checkbox in sync with any
+        programmatic changes.
+        """
         self.data_table.set_single_page_mode(enabled)
+        # keep the hidden viewer checkbox consistent as well
+        self.pdf_viewer.set_single_page_mode(enabled)
+
         # If a page is already selected, make sure the SPM view is in sync
         if enabled and self._current_file_path and self._current_page_num >= 0:
             self.data_table.navigate_to_page(self._current_file_path, self._current_page_num)

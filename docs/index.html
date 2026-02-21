@@ -419,6 +419,7 @@
     <a href="#drawing-boxes">✏️ Drawing Boxes</a>
     <a href="#extracting-text">🔍 Extracting Text</a>
     <a href="#managing-columns">📊 Managing Columns</a>
+    <a href="#template-manager">📋 Template Manager</a>
     <a href="#save-load">💾 Save &amp; Load</a>
     <a href="#export-excel">📈 Export to Excel</a>
     <a href="#single-page-mode">📄 Single Page Mode</a>
@@ -563,7 +564,7 @@
     and user-defined data columns. Click a data cell to select it for box drawing — if a drawn box exists for that cell the PDF viewer will be focused and centred on that box so it is immediately visible. Double-click to edit values manually.</p>
     
     <h3>3rd Column: PDF Page Viewer</h3>
-    <p>Renders the selected PDF page with zoom, pan, and interactive box drawing. A <strong>Centre</strong> button in the zoom toolbar resets pan and recentres the page; clicking a data cell in the table will highlight the corresponding box and centre the viewer on it (when present). Boxes are color-coded and labeled with their column names.</p>
+    <p>Renders the selected PDF page with zoom, pan, and interactive box drawing. The zoom toolbar contains a <strong>Centre</strong> button that resets pan, a <strong>Clear Box</strong> control for deleting the selected box, and a <strong>Single Page Mode</strong> checkbox on its left edge. Clicking a data cell in the table will highlight the corresponding box and centre the viewer on it (when present). Boxes are color-coded and labeled with their column names.</p>
 </section>
 
 <!-- ==================== IMPORTING PDFS ==================== -->
@@ -660,6 +661,40 @@
     File Name, File Path, and custom columns.</p>
 </section>
 
+<!-- ==================== TEMPLATE MANAGER ==================== -->
+<section id="template-manager">
+    <h2>Template Manager</h2>
+    
+    <p>The Template Manager allows you to save the layout of drawn boxes on a page as a template, and apply it to other pages.</p>
+    
+    <h3>Creating a New Template</h3>
+    <ol class="steps">
+        <li>Draw the desired boxes on a PDF page.</li>
+        <li>In the Template Manager zone (above the data table), click <strong>"New"</strong>.</li>
+        <li>Enter a name for the template and click OK.</li>
+    </ol>
+    
+    <h3>Applying a Template to the Current Page</h3>
+    <ol class="steps">
+        <li>Select the target page in the PDF Tree View.</li>
+        <li>Select the desired template from the dropdown menu in the Template Manager zone.</li>
+        <li>Click <strong>"Apply"</strong>. The boxes from the template will be applied to the current page.</li>
+    </ol>
+    
+    <h3>Managing Templates (Pop-up Window)</h3>
+    <p>Click <strong>"Manager"</strong> to open the Template Manager pop-up window.</p>
+    <ul>
+        <li><strong>Delete Templates:</strong> Select a template from the left list and click "Delete".</li>
+        <li><strong>Apply to Multiple Pages:</strong> 
+            <ol>
+                <li>Select a template from the left list.</li>
+                <li>Select one or more pages from the right list (you can use the checkboxes or click and drag to select multiple rows).</li>
+                <li>Click <strong>"Apply to Selected Pages"</strong>.</li>
+            </ol>
+        </li>
+    </ul>
+</section>
+
 <!-- ==================== SAVE & LOAD ==================== -->
 <section id="save-load">
     <h2>Save &amp; Load</h2>
@@ -726,8 +761,10 @@
     <ol class="steps">
         <li>
             <strong>Locate the toggle in the toolbar</strong>
-            <p>A <strong>"Single Page Mode"</strong> checkbox is placed at the right end of the main toolbar,
-            after the <em>Export Excel</em> button.</p>
+            <p>The <strong>"Single Page Mode"</strong> checkbox now lives in the PDF viewer's
+            zoom toolbar (the top of the right‑hand panel, next to the zoom/fit
+            controls).  It is still exposed via the Main Window object for
+            automation, but there is no longer a separate "Options" toolbar.</p>
         </li>
         <li>
             <strong>Check the checkbox</strong>

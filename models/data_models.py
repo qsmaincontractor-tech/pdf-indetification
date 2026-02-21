@@ -274,6 +274,42 @@ class PDFFileInfo:
 
 
 @dataclass
+class Template:
+    """
+    Represents a template of boxes that can be applied to pages.
+    
+    Attributes:
+        name: Name of the template.
+        ref_page: Reference page information (e.g., "File Name - Page 1").
+        remark: Optional remark or description.
+        boxes: List of BoxInfo objects defining the template.
+    """
+    name: str
+    ref_page: str
+    remark: str = ""
+    boxes: List[BoxInfo] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "name": self.name,
+            "ref_page": self.ref_page,
+            "remark": self.remark,
+            "boxes": [box.to_dict() for box in self.boxes],
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Template":
+        """Create a Template from a dictionary."""
+        return cls(
+            name=data.get("name", ""),
+            ref_page=data.get("ref_page", ""),
+            remark=data.get("remark", ""),
+            boxes=[BoxInfo.from_dict(b) for b in data.get("boxes", [])],
+        )
+
+
+@dataclass
 class ProjectData:
     """
     Represents the entire project state for save/load.
@@ -287,6 +323,7 @@ class ProjectData:
     """
     pdf_files: List[PDFFileInfo] = field(default_factory=list)
     columns: List[ExtractedDataColumn] = field(default_factory=list)
+    templates: List[Template] = field(default_factory=list)
     last_saved_time: str = ""
     last_selected_file: str = ""
     last_selected_page: int = -1
@@ -301,6 +338,7 @@ class ProjectData:
             "version": _SCHEMA_VERSION,
             "pdf_files": [f.to_dict() for f in self.pdf_files],
             "columns": [c.to_dict() for c in self.columns],
+            "templates": [t.to_dict() for t in self.templates],
             "last_saved_time": self.last_saved_time,
             "last_selected_file": self.last_selected_file,
             "last_selected_page": self.last_selected_page,
@@ -326,6 +364,7 @@ class ProjectData:
             columns=[
                 ExtractedDataColumn.from_dict(c) for c in data.get("columns", [])
             ],
+            templates=[Template.from_dict(t) for t in data.get("templates", [])],
             last_saved_time=data.get("last_saved_time", ""),
             last_selected_file=data.get("last_selected_file", ""),
             last_selected_page=data.get("last_selected_page", -1),

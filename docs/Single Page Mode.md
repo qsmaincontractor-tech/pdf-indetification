@@ -2,7 +2,7 @@ Objective:
 If there is too many data, the page will be too long and hard to navigate. In this case, we can use single page mode to show the data for single page only.
 
 How to use:
-1. Set `singlePageMode` to `true` in the options at the Top of Extract Data Banner.
+1. Enable the "Single Page Mode" checkbox located in the **main toolbar** (top of the window), next to the other file actions.
 
 UI:
 ```
@@ -36,7 +36,7 @@ UI:
  └───────────────────────────────────────────────────────────────────────────────┘
 
 ```
-- After enabling single page mode, the page will only show the data for current page. You can use the Previous and Next buttons to navigate between pages. The page number will be displayed at new mode window.
+- After enabling single page mode using the checkbox in the viewer toolbar, the page will only show the data for current page. You can use the Previous and Next buttons to navigate between pages. The page number will be displayed at new mode window.
 - If there is no data for current page, the corresponding row for extracted data will be empty. You can still add new column and fill in the data for current page.
 - All behavior of single page mode is the same as normal mode, except that it only shows data for current page. You can click the row to edit the data and focus the box in PDF viewer.
 - The user can adjust and sort the table. But before updating the data, the application should temp disable the sorting and adjusting behavior to avoid the data loss. After the data is updated, the sorting and adjusting behavior will be re-enabled.
