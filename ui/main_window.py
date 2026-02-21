@@ -44,6 +44,10 @@ from PyQt5 import uic
 # Absolute path to the project root (parent of this ui/ package).
 # Passed to subprocess workers so they can import project modules.
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# ensure the root directory is on sys.path when the module is executed
+# directly (avoids ModuleNotFoundError for 'models', 'utils', etc.)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
 
 from models.data_models import (
     ProjectData,
